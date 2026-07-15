@@ -38,3 +38,6 @@ One command per line:
   repositioning only the folded representative (thesis Alg. 10 lines 21–22). Localizing
   this is a planned optimization.
 - Not yet implemented: edge removal (Alg. 11) and batch insertion (Alg. 12–14).
+- Repeated insertion of many disconnected vertices before adding edges is O(n^2)
+  overall because `append_isolated` reindexes the Y order on each call (fine for
+  typical use; a future optimization can make it O(1) amortized).

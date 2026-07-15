@@ -32,10 +32,6 @@ public:
     // `delta`). Vertices outside `delta` keep their positions.
     void permute(const std::vector<vertex_t>& delta, const feline::XYOrdering& sub);
 
-    // Move r to X position band [lo, hi] and Y band [ylo, yhi] (SCC folding, Task 9).
-    void move_x_to(vertex_t r, uint32_t target);
-    void move_y_to(vertex_t r, uint32_t target);
-
     const std::vector<vertex_t>& x_order() const { return x_at_; }
     const std::vector<vertex_t>& y_order() const { return y_at_; }
 

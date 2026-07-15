@@ -70,26 +70,6 @@ void DynIndex::permute(const std::vector<vertex_t>& delta,
     }
 }
 
-void DynIndex::move_x_to(vertex_t r, uint32_t target) {
-    uint32_t cur = x_pos_.at(r);
-    if (cur == target) return;
-    x_at_.erase(x_at_.begin() + cur);
-    if (target > cur) --target;
-    x_at_.insert(x_at_.begin() + target, r);
-    uint32_t lo = std::min(cur, target);
-    for (uint32_t i = lo; i < x_at_.size(); ++i) x_pos_[x_at_[i]] = i;
-}
-
-void DynIndex::move_y_to(vertex_t r, uint32_t target) {
-    uint32_t cur = y_pos_.at(r);
-    if (cur == target) return;
-    y_at_.erase(y_at_.begin() + cur);
-    if (target > cur) --target;
-    y_at_.insert(y_at_.begin() + target, r);
-    uint32_t lo = std::min(cur, target);
-    for (uint32_t i = lo; i < y_at_.size(); ++i) y_pos_[y_at_[i]] = i;
-}
-
 feline::XYOrdering build_suborder(const DynamicGraph& g,
                                   const std::vector<vertex_t>& reps) {
     // Map representative id -> local index 0..k-1.

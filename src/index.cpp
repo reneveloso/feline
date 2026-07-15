@@ -6,6 +6,7 @@
 #include <numeric>
 #include <stack>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace feline {

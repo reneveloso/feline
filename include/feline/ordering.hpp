@@ -19,7 +19,9 @@ struct XYOrdering {
 template <typename ForEachSucc>
 XYOrdering compute_xy_ordering(uint32_t n, ForEachSucc&& for_each_succ) {
     // 1) Materialize a local CSR from the callback (callback used exactly twice).
-    std::vector<uint32_t> begin(static_cast<size_t>(n) + 1, 0);
+    // Offsets are size_t (edge count can exceed uint32_t range); adj VALUES are
+    // vertex ids and stay uint32_t.
+    std::vector<size_t> begin(static_cast<size_t>(n) + 1, 0);
     for (uint32_t u = 0; u < n; ++u) {
         uint32_t deg = 0;
         for_each_succ(u, [&](uint32_t) { ++deg; });
@@ -29,7 +31,7 @@ XYOrdering compute_xy_ordering(uint32_t n, ForEachSucc&& for_each_succ) {
 
     std::vector<uint32_t> adj(begin[n]);
     {
-        std::vector<uint32_t> cursor(begin.begin(), begin.end());
+        std::vector<size_t> cursor(begin.begin(), begin.end());
         for (uint32_t u = 0; u < n; ++u) {
             for_each_succ(u, [&](uint32_t w) { adj[cursor[u]++] = w; });
         }
@@ -42,7 +44,7 @@ XYOrdering compute_xy_ordering(uint32_t n, ForEachSucc&& for_each_succ) {
     std::vector<uint8_t> color(n, 0); // 0=white, 1=gray, 2=black
     std::vector<uint32_t> post;
     post.reserve(n);
-    std::vector<uint32_t> cur(begin.begin(), begin.begin() + n); // per-node cursor
+    std::vector<size_t> cur(begin.begin(), begin.begin() + n); // per-node cursor
     std::vector<uint32_t> stk;
     for (uint32_t s = 0; s < n; ++s) {
         if (color[s] != 0) continue;
@@ -74,7 +76,7 @@ XYOrdering compute_xy_ordering(uint32_t n, ForEachSucc&& for_each_succ) {
     out.y_rank.assign(n, 0);
     std::vector<uint32_t> in_deg(n, 0);
     for (uint32_t u = 0; u < n; ++u)
-        for (uint32_t e = begin[u]; e < begin[u + 1]; ++e)
+        for (size_t e = begin[u]; e < begin[u + 1]; ++e)
             ++in_deg[adj[e]];
 
     std::priority_queue<std::pair<uint32_t, uint32_t>> heap; // (x_rank, vertex)
@@ -86,7 +88,7 @@ XYOrdering compute_xy_ordering(uint32_t n, ForEachSucc&& for_each_succ) {
         uint32_t u = heap.top().second;
         heap.pop();
         out.y_rank[u] = rank++;
-        for (uint32_t e = begin[u]; e < begin[u + 1]; ++e) {
+        for (size_t e = begin[u]; e < begin[u + 1]; ++e) {
             uint32_t w = adj[e];
             if (--in_deg[w] == 0) heap.push({out.x_rank[w], w});
         }

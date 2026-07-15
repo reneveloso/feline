@@ -3,6 +3,7 @@
 #include "feline_dyn/dyn_query.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <stdexcept>
 #include <unordered_set>
 #include <vector>
@@ -132,6 +133,9 @@ bool FelinePK::reachable(vertex_t u, vertex_t v) {
 }
 
 void FelinePK::insert_edge(vertex_t u, vertex_t v) {
+    // Endpoints are auto-created if absent, so edges are self-bootstrapping.
+    if (!r_.contains(u)) insert_vertex(u);
+    if (!r_.contains(v)) insert_vertex(v);
     g_.add_edge(u, v);
     vertex_t a = r_.find(u), b = r_.find(v);
     if (a == b) return; // internal SCC edge
@@ -159,9 +163,12 @@ void FelinePK::fold_cycle(vertex_t u, vertex_t v, const std::vector<vertex_t>& v
         for (vertex_t p : g_.dag_pred(c)) if (!cyc.count(p)) I.insert(p);
         for (vertex_t s : g_.dag_succ(c)) if (!cyc.count(s)) O.insert(s);
     }
+    // SCC-convexity invariant: I and O must be disjoint, or the contracted DAG
+    // (I -> r' -> O) would contain a cycle and break build_suborder's DAG assumption.
+    for (vertex_t x : I) assert(!O.count(x) && "fold_cycle: I and O overlap => broken reachable=>dominates invariant");
 
-    // Remove all DAG edges touching folded reps, and drop folded reps from the DAG/index
-    // (except r'). Collect edges first to avoid mutating while iterating.
+    // Remove all DAG edges touching folded reps. Collect edges first to avoid
+    // mutating while iterating.
     std::vector<std::pair<vertex_t, vertex_t>> to_remove;
     for (vertex_t c : cyc) {
         for (vertex_t s : g_.dag_succ(c)) to_remove.push_back({c, s});
@@ -173,10 +180,11 @@ void FelinePK::fold_cycle(vertex_t u, vertex_t v, const std::vector<vertex_t>& v
     std::vector<vertex_t> members(cyc.begin(), cyc.end());
     r_.unite(members, rprime);
 
-    // Remove folded reps (except r') from the index and DAG vertex set.
+    // Remove folded reps (except r') from the DAG vertex set, so the rebuild below
+    // (via dag_out_all()) excludes them from `reps`. The index itself is fully
+    // rebuilt by set_from_scratch() below, so there is no need to touch it here.
     for (vertex_t c : cyc) {
         if (c == rprime) continue;
-        if (idx_.has(c)) idx_.remove(c);
         g_.dag_remove_vertex(c);
     }
     g_.dag_add_vertex(rprime);

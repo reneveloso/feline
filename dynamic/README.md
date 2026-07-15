@@ -23,3 +23,18 @@ Dynamic code is off by default. Enable it from the repository root:
     ./build/dynamic/dyn_demo <updates_file>
 
 See `../docs/superpowers/specs/2026-07-15-feline-dynamic-index-design.md` for the design.
+
+## Demo input format
+
+One command per line:
+
+    v <id>        insert a disconnected vertex
+    e <u> <v>     insert edge (u, v)
+    q <u> <v>     query reachability; prints "<u> <v> <0|1>"
+
+## Known limitations / future work
+
+- Cycle-closing insertions currently rebuild the whole index (O(|V_DAG|)) instead of
+  repositioning only the folded representative (thesis Alg. 10 lines 21–22). Localizing
+  this is a planned optimization.
+- Not yet implemented: edge removal (Alg. 11) and batch insertion (Alg. 12–14).

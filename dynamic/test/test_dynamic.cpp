@@ -332,6 +332,30 @@ void test_insert_edge_cycle_stress() {
     }
 }
 
+// Random edge insertions (may create cycles); verify all-pairs vs BFS at the end and
+// at checkpoints. Deterministic seed for reproducibility.
+void test_random_insertions_oracle() {
+    const vertex_t N = 12;
+    FelinePK pk;
+    DynamicGraph oracle_g;
+    for (vertex_t v = 0; v < N; ++v) { pk.insert_vertex(v); oracle_g.add_vertex(v); }
+
+    std::mt19937 rng(12345);
+    std::uniform_int_distribution<vertex_t> pick(0, N - 1);
+    for (int step = 0; step < 40; ++step) {
+        vertex_t u = pick(rng), v = pick(rng);
+        if (u == v) continue;
+        pk.insert_edge(u, v);
+        oracle_g.add_edge(u, v);
+        for (vertex_t a = 0; a < N; ++a)
+            for (vertex_t b = 0; b < N; ++b) {
+                bool expected = dyntest::bfs_reachable(oracle_g, a, b);
+                bool got = pk.reachable(a, b);
+                ASSERT(got == expected, "random oracle mismatch");
+            }
+    }
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -347,6 +371,7 @@ int main() {
     RUN_TEST(test_insert_edge_acyclic_stress);
     RUN_TEST(test_insert_edge_cycle_oracle);
     RUN_TEST(test_insert_edge_cycle_stress);
+    RUN_TEST(test_random_insertions_oracle);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

@@ -24,3 +24,6 @@ test/test_data/citeseerx.txt
 
 # Local-only Claude Code project instructions
 CLAUDE.md
+
+# Superpowers SDD scratch
+.superpowers/

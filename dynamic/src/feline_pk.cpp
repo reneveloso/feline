@@ -3,6 +3,7 @@
 #include "feline_dyn/dyn_query.hpp"
 
 #include <algorithm>
+#include <stdexcept>
 #include <unordered_set>
 #include <vector>
 
@@ -145,7 +146,9 @@ void FelinePK::insert_edge(vertex_t u, vertex_t v) {
 }
 
 void FelinePK::fold_cycle(vertex_t, vertex_t, const std::vector<vertex_t>&) {
-    // Implemented in Task 9.
+    // Interim stub: Task 9 will replace this body entirely. Fail loudly instead
+    // of silently leaving the index inconsistent for a cycle-closing insertion.
+    throw std::logic_error("fold_cycle not implemented yet (Task 9)");
 }
 
 } // namespace feline_dyn

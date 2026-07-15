@@ -5,6 +5,10 @@
 #include "feline_dyn/dyn_query.hpp"
 #include "feline_dyn/feline_pk.hpp"
 
+#include <algorithm>
+#include <cstdio>
+#include <numeric>
+#include <random>
 #include <vector>
 
 void test_skeleton() {
@@ -184,6 +188,71 @@ void test_insert_edge_acyclic_oracle() {
     }
 }
 
+// Randomized stress-oracle test for acyclic edge insertion (Task 8). This is the
+// ground truth for the acyclic reorder path: it should PASS. A fixed seed makes
+// every run reproducible. For each of several trials, a random topological
+// permutation of N vertices is generated, then a random subset of edges that only
+// go "lower -> higher" in that permutation (so the DAG stays acyclic and
+// fold_cycle, which is only a Task 9 stub, is never invoked) is inserted in a
+// random order into both FelinePK and a BFS-oracle DynamicGraph. After every
+// single edge insertion, ALL N*N pairs are cross-checked between pk.reachable()
+// and the BFS oracle.
+void test_insert_edge_acyclic_stress() {
+    std::mt19937 rng(987654321u); // fixed seed for determinism
+    const int kTrials = 200;
+    const size_t kMaxEdgesPerTrial = 60; // cap to keep the all-pairs check cheap
+
+    std::uniform_int_distribution<int> n_dist(6, 14);
+    std::uniform_real_distribution<double> prob_dist(0.0, 1.0);
+
+    for (int trial = 0; trial < kTrials; ++trial) {
+        vertex_t N = static_cast<vertex_t>(n_dist(rng));
+
+        // Random topological permutation of vertex ids 0..N-1.
+        std::vector<vertex_t> perm(N);
+        std::iota(perm.begin(), perm.end(), 0);
+        std::shuffle(perm.begin(), perm.end(), rng);
+
+        // Candidate DAG edges (perm[i], perm[j]) with i < j are guaranteed acyclic.
+        std::vector<std::pair<vertex_t, vertex_t>> edges;
+        for (vertex_t i = 0; i < N && edges.size() < kMaxEdgesPerTrial; ++i) {
+            for (vertex_t j = i + 1; j < N && edges.size() < kMaxEdgesPerTrial; ++j) {
+                if (prob_dist(rng) < 0.25) {
+                    edges.emplace_back(perm[i], perm[j]);
+                }
+            }
+        }
+        // Insert edges in a random order (not necessarily the (i,j) generation order).
+        std::shuffle(edges.begin(), edges.end(), rng);
+
+        FelinePK pk;
+        DynamicGraph oracle_g;
+        for (vertex_t v = 0; v < N; ++v) {
+            pk.insert_vertex(v);
+            oracle_g.add_vertex(v);
+        }
+
+        for (size_t e = 0; e < edges.size(); ++e) {
+            vertex_t u = edges[e].first, v = edges[e].second;
+            pk.insert_edge(u, v);
+            oracle_g.add_edge(u, v);
+            for (vertex_t a = 0; a < N; ++a) {
+                for (vertex_t b = 0; b < N; ++b) {
+                    bool expected = dyntest::bfs_reachable(oracle_g, a, b);
+                    bool got = pk.reachable(a, b);
+                    if (got != expected) {
+                        std::fprintf(stderr,
+                            "    stress mismatch: trial=%d N=%u edge#%zu=(%u,%u) "
+                            "pair=(%u,%u) expected=%d got=%d\n",
+                            trial, N, e, u, v, a, b, (int)expected, (int)got);
+                    }
+                    ASSERT(got == expected, "acyclic stress oracle mismatch");
+                }
+            }
+        }
+    }
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -196,6 +265,7 @@ int main() {
     RUN_TEST(test_dyn_query_diamond);
     RUN_TEST(test_felinepk_reachable_isolated);
     RUN_TEST(test_insert_edge_acyclic_oracle);
+    RUN_TEST(test_insert_edge_acyclic_stress);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

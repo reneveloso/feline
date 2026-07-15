@@ -138,9 +138,24 @@ void test_dyn_query_diamond() {
     ASSERT(!dyn_reachable(g, idx, 3, 0), "q: 3-/->0");
     ASSERT(dyn_reachable(g, idx, 2, 3), "q: 2->3");
     auto p = reduced_rectangle(g, idx, 0, 3);
-    ASSERT(!p.empty(), "q: P(0,3) non-empty");
+    std::vector<vertex_t> expected_p03 = {0, 1, 2, 3};
+    ASSERT(p == expected_p03, "q: P(0,3) == {0,1,2,3}");
+    auto p1 = reduced_rectangle(g, idx, 0, 1);
+    std::vector<vertex_t> expected_p01 = {0, 1};
+    ASSERT(p1 == expected_p01, "q: P(0,1) == {0,1}");
     auto p2 = reduced_rectangle(g, idx, 1, 2);
     ASSERT(p2.empty(), "q: P(1,2) empty");
+}
+
+void test_felinepk_reachable_isolated() {
+    FelinePK pk;
+    pk.insert_vertex(5);
+    pk.insert_vertex(7);
+    ASSERT(pk.reachable(5, 5), "pk-reach: same representative is reachable (reflexive)");
+    ASSERT(!pk.reachable(5, 7), "pk-reach: disconnected 5 -/-> 7");
+    ASSERT(!pk.reachable(7, 5), "pk-reach: disconnected 7 -/-> 5");
+    ASSERT(!pk.reachable(99, 5), "pk-reach: unknown source guard");
+    ASSERT(!pk.reachable(5, 99), "pk-reach: unknown target guard");
 }
 
 int main() {
@@ -153,6 +168,7 @@ int main() {
     RUN_TEST(test_build_suborder_chain);
     RUN_TEST(test_insert_remove_vertex);
     RUN_TEST(test_dyn_query_diamond);
+    RUN_TEST(test_felinepk_reachable_isolated);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

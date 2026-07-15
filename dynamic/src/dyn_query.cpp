@@ -76,7 +76,6 @@ std::vector<vertex_t> reduced_rectangle(const DynamicGraph& g, const DynIndex& i
     for (vertex_t node : in_rect) {
         if (reaches_b.count(node)) result.push_back(node);
     }
-    if (!reaches_b.count(b)) {} // b included via reaches_b set below
     result.push_back(b);
     // Deduplicate (b may already be present if it was in in_rect).
     std::sort(result.begin(), result.end());

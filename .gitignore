@@ -21,3 +21,6 @@ Thumbs.db
 
 # Large benchmark datasets (exceed GitHub's 100 MB per-file limit)
 test/test_data/citeseerx.txt
+
+# Local-only Claude Code project instructions
+CLAUDE.md

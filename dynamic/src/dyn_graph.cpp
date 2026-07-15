@@ -1,5 +1,7 @@
 #include "feline_dyn/dyn_graph.hpp"
 
+#include <cassert>
+
 namespace feline_dyn {
 
 const VertexSet DynamicGraph::kEmpty{};
@@ -21,6 +23,7 @@ bool Representative::contains(vertex_t v) const {
 }
 
 vertex_t Representative::find(vertex_t v) {
+    assert(contains(v) && "Representative::find on unknown vertex");
     vertex_t root = v;
     while (parent_[root] != root) root = parent_[root];
     // path compression
@@ -33,16 +36,22 @@ vertex_t Representative::find(vertex_t v) {
 }
 
 vertex_t Representative::unite(const std::vector<vertex_t>& members, vertex_t chosen) {
-    vertex_t croot = find(chosen);
+    vertex_t root = find(chosen);
     for (vertex_t m : members) {
         vertex_t mroot = find(m);
-        if (mroot == croot) continue;
-        // Force chosen's root to remain the representative id `chosen`:
-        parent_[mroot] = croot;
-        rank_[croot] = rank_[croot] > rank_[mroot] + 1 ? rank_[croot] : rank_[mroot] + 1;
+        if (mroot == root) continue;
+        parent_[mroot] = root;
+        rank_[root] = rank_[root] > rank_[mroot] + 1 ? rank_[root] : rank_[mroot] + 1;
     }
-    // Ensure the returned/representative id is exactly `chosen`.
-    // (find(chosen) == croot; croot is chosen's current root.)
+    // `root` is now the root of the whole merged tree, but `chosen` may not
+    // have been its own root at call time (root == find(chosen) could
+    // differ from chosen). Re-point the tree so `chosen` is canonically the
+    // representative: after this, find(chosen) == chosen unconditionally.
+    if (root != chosen) {
+        parent_[root] = chosen;
+        rank_[chosen] = rank_[chosen] > rank_[root] + 1 ? rank_[chosen] : rank_[root] + 1;
+        parent_[chosen] = chosen;
+    }
     return chosen;
 }
 

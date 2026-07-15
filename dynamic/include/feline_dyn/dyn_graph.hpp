@@ -16,8 +16,11 @@ public:
     void make_set(vertex_t v);
     void erase(vertex_t v);              // only valid for a singleton set
     bool contains(vertex_t v) const;
-    vertex_t find(vertex_t v);           // with path compression
+    vertex_t find(vertex_t v);           // with path compression; asserts v is known (debug builds)
     // Union every member into `chosen`; returns `chosen`. All members must exist.
+    // Postcondition: find(chosen) == chosen, unconditionally (even if `chosen`
+    // was not its own root at call time) — `chosen` is guaranteed to be the
+    // representative id of the merged set.
     vertex_t unite(const std::vector<vertex_t>& members, vertex_t chosen);
 
 private:

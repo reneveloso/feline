@@ -1,6 +1,7 @@
 #include "test_util.hpp"
 #include "feline_dyn/dyn_graph.hpp"
 #include "feline_dyn/dyn_index.hpp"
+#include "feline_dyn/feline_pk.hpp"
 
 void test_skeleton() {
     ASSERT(true, "skeleton builds and runs");
@@ -100,6 +101,19 @@ void test_build_suborder_chain() {
     ASSERT(ord.y_rank[0] < ord.y_rank[1] && ord.y_rank[1] < ord.y_rank[2], "suborder: Y topo");
 }
 
+void test_insert_remove_vertex() {
+    FelinePK pk;
+    pk.insert_vertex(5);
+    pk.insert_vertex(7);
+    ASSERT(pk.index().has(5) && pk.index().has(7), "pk: vertices indexed");
+    ASSERT(pk.rep().find(5) == 5 && pk.rep().find(7) == 7, "pk: self-representatives");
+    // isolated vertex is at bottom-right: x is max, y is min among current
+    ASSERT(pk.index().x(5) < pk.index().x(7), "pk: x append order");
+    pk.remove_vertex(5);
+    ASSERT(!pk.index().has(5) && !pk.rep().contains(5), "pk: vertex removed");
+    ASSERT(pk.index().has(7), "pk: other vertex intact");
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -108,6 +122,7 @@ int main() {
     RUN_TEST(test_dynamic_graph_edges);
     RUN_TEST(test_dynindex_isolated);
     RUN_TEST(test_build_suborder_chain);
+    RUN_TEST(test_insert_remove_vertex);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

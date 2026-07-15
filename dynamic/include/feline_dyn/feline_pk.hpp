@@ -3,6 +3,8 @@
 #include "feline_dyn/dyn_graph.hpp"
 #include "feline_dyn/dyn_index.hpp"
 
+#include <vector>
+
 namespace feline_dyn {
 
 // Feline-PK façade: maintains (DynamicGraph, Representative, DynIndex) under updates.
@@ -24,6 +26,8 @@ public:
     const DynIndex& index() const { return idx_; }
 
 private:
+    void fold_cycle(vertex_t u, vertex_t v, const std::vector<vertex_t>& v_cycles);
+
     DynamicGraph g_;
     Representative r_;
     DynIndex idx_;

@@ -1,8 +1,11 @@
 #include "test_util.hpp"
+#include "oracle.hpp"
 #include "feline_dyn/dyn_graph.hpp"
 #include "feline_dyn/dyn_index.hpp"
 #include "feline_dyn/dyn_query.hpp"
 #include "feline_dyn/feline_pk.hpp"
+
+#include <vector>
 
 void test_skeleton() {
     ASSERT(true, "skeleton builds and runs");
@@ -158,6 +161,29 @@ void test_felinepk_reachable_isolated() {
     ASSERT(!pk.reachable(5, 99), "pk-reach: unknown target guard");
 }
 
+// Insert a sequence of edges (no cycles) and verify all-pairs vs BFS oracle each step.
+void test_insert_edge_acyclic_oracle() {
+    FelinePK pk;
+    const vertex_t N = 6;
+    for (vertex_t v = 0; v < N; ++v) pk.insert_vertex(v);
+    // A DAG built incrementally: 0->1,0->2,1->3,2->3,3->4,3->5
+    std::vector<std::pair<vertex_t, vertex_t>> edges = {
+        {0,1},{0,2},{1,3},{2,3},{3,4},{3,5}
+    };
+    DynamicGraph oracle_g;
+    for (vertex_t v = 0; v < N; ++v) oracle_g.add_vertex(v);
+    for (auto [u, v] : edges) {
+        pk.insert_edge(u, v);
+        oracle_g.add_edge(u, v);
+        for (vertex_t a = 0; a < N; ++a)
+            for (vertex_t b = 0; b < N; ++b) {
+                bool expected = dyntest::bfs_reachable(oracle_g, a, b);
+                bool got = pk.reachable(a, b);
+                ASSERT(got == expected, "acyclic oracle mismatch");
+            }
+    }
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -169,6 +195,7 @@ int main() {
     RUN_TEST(test_insert_remove_vertex);
     RUN_TEST(test_dyn_query_diamond);
     RUN_TEST(test_felinepk_reachable_isolated);
+    RUN_TEST(test_insert_edge_acyclic_oracle);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

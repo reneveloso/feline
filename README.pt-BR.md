@@ -231,6 +231,21 @@ Opcoes:
 - `--edges grafo.txt` -- desenhar arestas do grafo como setas.
 - `--no-labels` -- ocultar rotulos dos vertices (recomendado para grafos grandes).
 
+### Converter grafos em lista de adjacencia
+
+Alguns datasets sao distribuidos no formato de lista de adjacencia. A ferramenta `convert_adjlist` os converte para o formato de lista de arestas usado pelo `feline`:
+
+```bash
+./build/convert_adjlist <entrada.gra> <saida.txt>
+```
+
+> **Datasets.** Os grafos reais de benchmark usados no artigo estao disponiveis
+> no arquivo do projeto GRAIL, no formato `.gra` (lista de adjacencia):
+> <https://code.google.com/archive/p/grail/downloads>. Baixe o arquivo `.gra`
+> e converta com `convert_adjlist` antes de rodar o `feline`. O maior dataset
+> (`citeseerx`, 217 MB) nao e versionado neste repositorio por causa do limite
+> de 100 MB por arquivo do GitHub -- obtenha-o no arquivo acima.
+
 ## Formatos de arquivo
 
 ### Grafo de entrada

@@ -239,6 +239,13 @@ Some datasets are distributed in adjacency-list format. The `convert_adjlist` to
 ./build/convert_adjlist <input.gra> <output.txt>
 ```
 
+> **Datasets.** The real-world benchmark graphs used in the paper are available
+> from the GRAIL project archive, in `.gra` (adjacency-list) format:
+> <https://code.google.com/archive/p/grail/downloads>. Download the `.gra`
+> file and convert it with `convert_adjlist` before running `feline`.
+> The largest dataset (`citeseerx`, 217 MB) is not tracked in this repository
+> due to GitHub's 100 MB per-file limit — obtain it from the archive above.
+
 ## File formats
 
 ### Input graph

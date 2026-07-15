@@ -1,5 +1,6 @@
 #include "test_util.hpp"
 #include "feline_dyn/dyn_graph.hpp"
+#include "feline_dyn/dyn_index.hpp"
 
 void test_skeleton() {
     ASSERT(true, "skeleton builds and runs");
@@ -72,12 +73,41 @@ void test_dynamic_graph_edges() {
     ASSERT(g.dag_succ(0).empty() && g.dag_pred(1).empty(), "dg: dag edge removed");
 }
 
+void test_dynindex_isolated() {
+    DynIndex idx;
+    idx.append_isolated(10);
+    idx.append_isolated(20);
+    // 10 appended first: x(10) < x(20); y is prepended so later appends get smaller y.
+    ASSERT(idx.has(10) && idx.has(20), "dynidx: has");
+    ASSERT(idx.x(10) < idx.x(20), "dynidx: x order by append");
+    ASSERT(idx.y(20) < idx.y(10), "dynidx: y prepended");
+    ASSERT(idx.size() == 2, "dynidx: size 2");
+    idx.remove(10);
+    ASSERT(!idx.has(10) && idx.size() == 1, "dynidx: remove");
+    ASSERT(idx.x(20) == 0, "dynidx: compacted x");
+}
+
+void test_build_suborder_chain() {
+    // sub-DAG: 0 -> 1 -> 2  (reps {0,1,2})
+    DynamicGraph g;
+    for (vertex_t v = 0; v < 3; ++v) g.dag_add_vertex(v);
+    g.dag_add_edge(0, 1);
+    g.dag_add_edge(1, 2);
+    std::vector<vertex_t> reps = {0, 1, 2};
+    feline::XYOrdering ord = build_suborder(g, reps);
+    // topological property on X and Y for edges (0,1),(1,2)
+    ASSERT(ord.x_rank[0] < ord.x_rank[1] && ord.x_rank[1] < ord.x_rank[2], "suborder: X topo");
+    ASSERT(ord.y_rank[0] < ord.y_rank[1] && ord.y_rank[1] < ord.y_rank[2], "suborder: Y topo");
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
     RUN_TEST(test_union_find);
     RUN_TEST(test_union_find_representative);
     RUN_TEST(test_dynamic_graph_edges);
+    RUN_TEST(test_dynindex_isolated);
+    RUN_TEST(test_build_suborder_chain);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

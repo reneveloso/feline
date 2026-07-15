@@ -253,6 +253,85 @@ void test_insert_edge_acyclic_stress() {
     }
 }
 
+// Fixed cycle-folding oracle: insert edges that close cycles and cross-check
+// all-pairs reachability against BFS after every insertion (brief Step 1).
+void test_insert_edge_cycle_oracle() {
+    FelinePK pk;
+    const vertex_t N = 5;
+    for (vertex_t v = 0; v < N; ++v) pk.insert_vertex(v);
+    DynamicGraph oracle_g;
+    for (vertex_t v = 0; v < N; ++v) oracle_g.add_vertex(v);
+
+    // Edges that create a cycle: 0->1->2->3, then 3->1 (folds {1,2,3}), then 3->4.
+    std::vector<std::pair<vertex_t, vertex_t>> edges = {
+        {0,1},{1,2},{2,3},{3,1},{3,4},{4,2}
+    };
+    for (auto [u, v] : edges) {
+        pk.insert_edge(u, v);
+        oracle_g.add_edge(u, v);
+        for (vertex_t a = 0; a < N; ++a)
+            for (vertex_t b = 0; b < N; ++b) {
+                bool expected = dyntest::bfs_reachable(oracle_g, a, b);
+                bool got = pk.reachable(a, b);
+                ASSERT(got == expected, "cycle oracle mismatch");
+            }
+    }
+    // After folding, 1,2,3 are mutually reachable.
+    ASSERT(pk.reachable(1, 3) && pk.reachable(3, 1), "cycle: 1<->3 same SCC");
+}
+
+// Randomized CYCLIC stress oracle (Task 9 ground truth). Unlike the acyclic stress
+// test, edges are drawn over ALL ordered pairs (u,v), u!=v, so cycles are allowed and
+// fold_cycle is exercised heavily. Fixed seed for reproducibility. After every single
+// edge insertion, ALL N*N pairs are cross-checked between pk.reachable() and BFS.
+void test_insert_edge_cycle_stress() {
+    std::mt19937 rng(246813579u); // fixed seed for determinism
+    const int kTrials = 200;
+
+    std::uniform_int_distribution<int> n_dist(5, 12);
+    std::uniform_real_distribution<double> prob_dist(0.0, 1.0);
+
+    for (int trial = 0; trial < kTrials; ++trial) {
+        vertex_t N = static_cast<vertex_t>(n_dist(rng));
+
+        // Candidate edges over ALL ordered pairs (u != v): cycles allowed.
+        std::vector<std::pair<vertex_t, vertex_t>> edges;
+        for (vertex_t u = 0; u < N; ++u) {
+            for (vertex_t w = 0; w < N; ++w) {
+                if (u == w) continue;
+                if (prob_dist(rng) < 0.3) edges.emplace_back(u, w);
+            }
+        }
+        std::shuffle(edges.begin(), edges.end(), rng);
+
+        FelinePK pk;
+        DynamicGraph oracle_g;
+        for (vertex_t v = 0; v < N; ++v) {
+            pk.insert_vertex(v);
+            oracle_g.add_vertex(v);
+        }
+
+        for (size_t e = 0; e < edges.size(); ++e) {
+            vertex_t u = edges[e].first, v = edges[e].second;
+            pk.insert_edge(u, v);
+            oracle_g.add_edge(u, v);
+            for (vertex_t a = 0; a < N; ++a) {
+                for (vertex_t b = 0; b < N; ++b) {
+                    bool expected = dyntest::bfs_reachable(oracle_g, a, b);
+                    bool got = pk.reachable(a, b);
+                    if (got != expected) {
+                        std::fprintf(stderr,
+                            "    cycle stress mismatch: trial=%d N=%u edge#%zu=(%u,%u) "
+                            "pair=(%u,%u) expected=%d got=%d\n",
+                            trial, N, e, u, v, a, b, (int)expected, (int)got);
+                    }
+                    ASSERT(got == expected, "cycle stress oracle mismatch");
+                }
+            }
+        }
+    }
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -266,6 +345,8 @@ int main() {
     RUN_TEST(test_felinepk_reachable_isolated);
     RUN_TEST(test_insert_edge_acyclic_oracle);
     RUN_TEST(test_insert_edge_acyclic_stress);
+    RUN_TEST(test_insert_edge_cycle_oracle);
+    RUN_TEST(test_insert_edge_cycle_stress);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

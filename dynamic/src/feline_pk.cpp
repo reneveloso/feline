@@ -145,10 +145,57 @@ void FelinePK::insert_edge(vertex_t u, vertex_t v) {
     }
 }
 
-void FelinePK::fold_cycle(vertex_t, vertex_t, const std::vector<vertex_t>&) {
-    // Interim stub: Task 9 will replace this body entirely. Fail loudly instead
-    // of silently leaving the index inconsistent for a cycle-closing insertion.
-    throw std::logic_error("fold_cycle not implemented yet (Task 9)");
+void FelinePK::fold_cycle(vertex_t u, vertex_t v, const std::vector<vertex_t>& v_cycles) {
+    // Elect representative r' deterministically: r(v).
+    vertex_t rprime = r_.find(v);
+
+    std::unordered_set<vertex_t> cyc(v_cycles.begin(), v_cycles.end());
+    cyc.insert(r_.find(u)); // ensure both endpoints' reps are in the folded set
+    cyc.insert(r_.find(v));
+
+    // I = DAG predecessors of the set outside it; O = DAG successors outside it.
+    std::unordered_set<vertex_t> I, O;
+    for (vertex_t c : cyc) {
+        for (vertex_t p : g_.dag_pred(c)) if (!cyc.count(p)) I.insert(p);
+        for (vertex_t s : g_.dag_succ(c)) if (!cyc.count(s)) O.insert(s);
+    }
+
+    // Remove all DAG edges touching folded reps, and drop folded reps from the DAG/index
+    // (except r'). Collect edges first to avoid mutating while iterating.
+    std::vector<std::pair<vertex_t, vertex_t>> to_remove;
+    for (vertex_t c : cyc) {
+        for (vertex_t s : g_.dag_succ(c)) to_remove.push_back({c, s});
+        for (vertex_t p : g_.dag_pred(c)) to_remove.push_back({p, c});
+    }
+    for (auto [a, b] : to_remove) g_.dag_remove_edge(a, b);
+
+    // Union r: all folded reps map to r'.
+    std::vector<vertex_t> members(cyc.begin(), cyc.end());
+    r_.unite(members, rprime);
+
+    // Remove folded reps (except r') from the index and DAG vertex set.
+    for (vertex_t c : cyc) {
+        if (c == rprime) continue;
+        if (idx_.has(c)) idx_.remove(c);
+        g_.dag_remove_vertex(c);
+    }
+    g_.dag_add_vertex(rprime);
+
+    // Rewire E_DAG: I -> r' and r' -> O (skip self-loops).
+    for (vertex_t p : I) if (p != rprime) g_.dag_add_edge(p, rprime);
+    for (vertex_t s : O) if (s != rprime) g_.dag_add_edge(rprime, s);
+
+    // First-increment simplification: rebuild the whole index from the current DAG.
+    std::vector<vertex_t> reps;
+    reps.reserve(g_.dag_out_all().size());
+    for (const auto& kv : g_.dag_out_all()) reps.push_back(kv.first);
+    feline::XYOrdering ord = build_suborder(g_, reps);
+    std::vector<vertex_t> ox(reps.size()), oy(reps.size());
+    for (uint32_t i = 0; i < reps.size(); ++i) {
+        ox[ord.x_rank[i]] = reps[i];
+        oy[ord.y_rank[i]] = reps[i];
+    }
+    idx_.set_from_scratch(ox, oy);
 }
 
 } // namespace feline_dyn

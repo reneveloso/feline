@@ -1,5 +1,7 @@
 #include "feline_dyn/feline_pk.hpp"
 
+#include "feline_dyn/dyn_query.hpp"
+
 namespace feline_dyn {
 
 void FelinePK::insert_vertex(vertex_t v) {
@@ -16,6 +18,13 @@ void FelinePK::remove_vertex(vertex_t v) {
     r_.erase(v);
     g_.dag_remove_vertex(v);
     g_.remove_vertex(v);
+}
+
+bool FelinePK::reachable(vertex_t u, vertex_t v) {
+    if (!r_.contains(u) || !r_.contains(v)) return false;
+    vertex_t a = r_.find(u), b = r_.find(v);
+    if (a == b) return true; // same SCC
+    return dyn_reachable(g_, idx_, a, b);
 }
 
 } // namespace feline_dyn

@@ -1,6 +1,7 @@
 #include "test_util.hpp"
 #include "feline_dyn/dyn_graph.hpp"
 #include "feline_dyn/dyn_index.hpp"
+#include "feline_dyn/dyn_query.hpp"
 #include "feline_dyn/feline_pk.hpp"
 
 void test_skeleton() {
@@ -114,6 +115,34 @@ void test_insert_remove_vertex() {
     ASSERT(pk.index().has(7), "pk: other vertex intact");
 }
 
+static DynIndex make_index_diamond(DynamicGraph& g) {
+    // DAG: 0->1, 0->2, 1->3, 2->3.  A valid (X,Y): use build_suborder.
+    for (vertex_t v = 0; v < 4; ++v) g.dag_add_vertex(v);
+    g.dag_add_edge(0, 1); g.dag_add_edge(0, 2);
+    g.dag_add_edge(1, 3); g.dag_add_edge(2, 3);
+    std::vector<vertex_t> reps = {0, 1, 2, 3};
+    feline::XYOrdering ord = build_suborder(g, reps);
+    std::vector<vertex_t> ox(4), oy(4);
+    for (uint32_t i = 0; i < 4; ++i) { ox[ord.x_rank[i]] = reps[i]; oy[ord.y_rank[i]] = reps[i]; }
+    DynIndex idx;
+    idx.set_from_scratch(ox, oy);
+    return idx;
+}
+
+void test_dyn_query_diamond() {
+    DynamicGraph g;
+    DynIndex idx = make_index_diamond(g);
+    ASSERT(dyn_reachable(g, idx, 0, 3), "q: 0->3");
+    ASSERT(dyn_reachable(g, idx, 0, 1), "q: 0->1");
+    ASSERT(!dyn_reachable(g, idx, 1, 2), "q: 1-/->2");
+    ASSERT(!dyn_reachable(g, idx, 3, 0), "q: 3-/->0");
+    ASSERT(dyn_reachable(g, idx, 2, 3), "q: 2->3");
+    auto p = reduced_rectangle(g, idx, 0, 3);
+    ASSERT(!p.empty(), "q: P(0,3) non-empty");
+    auto p2 = reduced_rectangle(g, idx, 1, 2);
+    ASSERT(p2.empty(), "q: P(1,2) empty");
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -123,6 +152,7 @@ int main() {
     RUN_TEST(test_dynindex_isolated);
     RUN_TEST(test_build_suborder_chain);
     RUN_TEST(test_insert_remove_vertex);
+    RUN_TEST(test_dyn_query_diamond);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

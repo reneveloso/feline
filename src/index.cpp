@@ -1,86 +1,23 @@
 #include "feline/index.hpp"
+#include "feline/ordering.hpp"
 
 #include <algorithm>
 #include <cstdio>
 #include <numeric>
-#include <queue>
 #include <stack>
 #include <stdexcept>
 #include <vector>
 
 namespace feline {
 
-// Kahn's algorithm: BFS-based topological sort -> X coordinates
-static void compute_x_rank(const CSRGraph& dag, FELINEIndex& idx) {
-    const uint32_t n = dag.n;
-    idx.x_rank.resize(n);
-
-    // Compute in-degrees
-    std::vector<uint32_t> in_deg(n, 0);
-    for (uint32_t u = 0; u < n; ++u) {
-        for (edge_t e = dag.out_begin[u]; e < dag.out_begin[u + 1]; ++e) {
-            in_deg[dag.out_adj[e]]++;
-        }
-    }
-
-    std::queue<vertex_t> q;
-    for (uint32_t v = 0; v < n; ++v) {
-        if (in_deg[v] == 0) q.push(v);
-    }
-
-    uint32_t rank = 0;
-    while (!q.empty()) {
-        vertex_t u = q.front();
-        q.pop();
-        idx.x_rank[u] = rank++;
-        for (edge_t e = dag.out_begin[u]; e < dag.out_begin[u + 1]; ++e) {
-            vertex_t w = dag.out_adj[e];
-            if (--in_deg[w] == 0) q.push(w);
-        }
-    }
-
-    if (rank != n) {
-        throw std::runtime_error("Graph contains a cycle (not a DAG)");
-    }
-}
-
-// Kornaropoulos heuristic: second topological ordering -> Y coordinates
-// At each step, pick the root with the highest X rank.
-static void compute_y_rank(const CSRGraph& dag, FELINEIndex& idx) {
-    const uint32_t n = dag.n;
-    idx.y_rank.resize(n);
-
-    // Compute in-degrees
-    std::vector<uint32_t> in_deg(n, 0);
-    for (uint32_t u = 0; u < n; ++u) {
-        for (edge_t e = dag.out_begin[u]; e < dag.out_begin[u + 1]; ++e) {
-            in_deg[dag.out_adj[e]]++;
-        }
-    }
-
-    // Max-heap: (x_rank, vertex)
-    using pq_elem = std::pair<uint32_t, vertex_t>;
-    std::priority_queue<pq_elem> heap;
-
-    for (uint32_t v = 0; v < n; ++v) {
-        if (in_deg[v] == 0) {
-            heap.push({idx.x_rank[v], v});
-        }
-    }
-
-    uint32_t rank = 0;
-    while (!heap.empty()) {
-        auto [xr, u] = heap.top();
-        heap.pop();
-        idx.y_rank[u] = rank++;
-
-        for (edge_t e = dag.out_begin[u]; e < dag.out_begin[u + 1]; ++e) {
-            vertex_t w = dag.out_adj[e];
-            if (--in_deg[w] == 0) {
-                heap.push({idx.x_rank[w], w});
-            }
-        }
-    }
+// X (DFS topological order) + Y (Kornaropoulos), via the shared core routine.
+static void compute_xy(const CSRGraph& dag, FELINEIndex& idx) {
+    XYOrdering ord = compute_xy_ordering(dag.n, [&](uint32_t u, const auto& emit) {
+        for (edge_t e = dag.out_begin[u]; e < dag.out_begin[u + 1]; ++e)
+            emit(dag.out_adj[e]);
+    });
+    idx.x_rank = std::move(ord.x_rank);
+    idx.y_rank = std::move(ord.y_rank);
 }
 
 // Iterative DFS to build spanning tree + min-post intervals (positive-cut filter)
@@ -174,8 +111,7 @@ static void compute_levels(const CSRGraph& dag, FELINEIndex& idx) {
 
 FELINEIndex build_index(const CSRGraph& dag) {
     FELINEIndex idx;
-    compute_x_rank(dag, idx);
-    compute_y_rank(dag, idx);
+    compute_xy(dag, idx);
     compute_spanning_tree_intervals(dag, idx);
     compute_levels(dag, idx);
     return idx;

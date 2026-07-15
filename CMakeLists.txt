@@ -19,6 +19,9 @@ add_executable(feline
 )
 target_include_directories(feline PRIVATE include)
 
+# Tools
+add_executable(convert_adjlist tools/convert_adjlist.cpp)
+
 enable_testing()
 add_executable(feline_tests
     test/test_main.cpp

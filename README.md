@@ -1,33 +1,35 @@
 # FELINE - Fast rEfined onLINE search
 
-Implementacao em C++ do algoritmo FELINE para consultas de alcancabilidade em grafos dirigidos, conforme descrito no artigo:
+> 🇧🇷 Uma versão deste documento em português está disponível em [README.pt-BR.md](README.pt-BR.md).
+
+C++ implementation of the FELINE algorithm for reachability queries on directed graphs, as described in the paper:
 
 > **Reachability Queries in Very Large Graphs: A Fast Refined Online Search Approach**
 > Veloso, R. R.; Cerf, L.; Meira Jr, W.; Zaki, M. J.
 > EDBT 2014. DOI: 10.5441/002/edbt.2014.46
 
-Dado um grafo dirigido G e dois vertices u e v, FELINE responde eficientemente se existe um caminho de u a v.
+Given a directed graph G and two vertices u and v, FELINE efficiently answers whether a path from u to v exists.
 
-## Como funciona
+## How it works
 
-FELINE constroi um indice que associa cada vertice a coordenadas (X, Y) em um plano 2D (Dominance Drawing). A propriedade fundamental e:
+FELINE builds an index that assigns each vertex a pair of coordinates (X, Y) in a 2D plane (Dominance Drawing). The fundamental property is:
 
-- Se u alcanca v, entao `X[u] <= X[v]` **e** `Y[u] <= Y[v]`
-- Se essa relacao **nao** vale, u **nao** alcanca v (decidido em tempo constante)
+- If u reaches v, then `X[u] <= X[v]` **and** `Y[u] <= Y[v]`
+- If this relation does **not** hold, u does **not** reach v (decided in constant time)
 
-Quando a relacao vale mas nao e conclusiva, uma busca DFS com poda e realizada em um subgrafo reduzido.
+When the relation holds but is inconclusive, a pruned DFS is performed over a reduced subgraph.
 
-### Filtros aplicados nas consultas
+### Filters applied during queries
 
-1. **Positive-cut**: intervalos min-post de uma spanning tree decidem alcancabilidade positiva em O(1)
-2. **Negative-cut**: relacao de dominancia (X, Y) descarta nao-alcancabilidade em O(1)
-3. **Level filter**: vertices no mesmo nivel ou nivel inferior nao podem ser alcancados
+1. **Positive-cut**: min-post intervals from a spanning tree decide positive reachability in O(1)
+2. **Negative-cut**: the dominance relation (X, Y) rules out non-reachability in O(1)
+3. **Level filter**: vertices at the same or a lower level cannot be reached
 
-## Arquitetura interna
+## Internal architecture
 
-### Estruturas de dados
+### Data structures
 
-**Grafo CSR (Compressed Sparse Row)** -- representacao compacta e cache-friendly:
+**CSR graph (Compressed Sparse Row)** -- compact, cache-friendly representation:
 
 ```cpp
 using vertex_t = uint32_t;
@@ -35,53 +37,53 @@ using edge_t   = uint64_t;
 
 struct CSRGraph {
     uint32_t n;                      // vertices
-    uint64_t m;                      // arestas
-    std::vector<edge_t> out_begin;   // tamanho n+1, inicio dos sucessores
-    std::vector<vertex_t> out_adj;   // tamanho m, sucessores contiguos
+    uint64_t m;                      // edges
+    std::vector<edge_t> out_begin;   // size n+1, start of successors
+    std::vector<vertex_t> out_adj;   // size m, contiguous successors
 };
 ```
 
-**Indice FELINE** -- 5 arrays de tamanho |V| (espaco linear):
+**FELINE index** -- 5 arrays of size |V| (linear space):
 
 ```cpp
 struct FELINEIndex {
-    std::vector<uint32_t> x_rank;         // coordenada X (ordem topologica)
-    std::vector<uint32_t> y_rank;         // coordenada Y (heuristica Kornaropoulos)
+    std::vector<uint32_t> x_rank;         // X coordinate (topological order)
+    std::vector<uint32_t> y_rank;         // Y coordinate (Kornaropoulos heuristic)
     std::vector<uint32_t> interval_start; // s_u (positive-cut, min-post)
     std::vector<uint32_t> interval_end;   // e_u (positive-cut, min-post)
-    std::vector<uint32_t> level;          // filtro de nivel
+    std::vector<uint32_t> level;          // level filter
 };
 ```
 
-### Pipeline de construcao do indice
+### Index construction pipeline
 
-1. **Condensacao SCC** (`graph.cpp`): Tarjan **iterativo** com stack explicita. Colapsa componentes fortemente conexos em vertices unicos, produzindo um DAG. Complexidade: O(|V| + |E|).
+1. **SCC condensation** (`graph.cpp`): **iterative** Tarjan with an explicit stack. Collapses strongly connected components into single vertices, producing a DAG. Complexity: O(|V| + |E|).
 
-2. **Coordenada X** (`index.cpp`): Kahn's algorithm (ordenacao topologica por BFS). `x_rank[u]` = posicao de u na ordenacao. Complexidade: O(|V| + |E|).
+2. **X coordinate** (`index.cpp`): Kahn's algorithm (topological sort via BFS). `x_rank[u]` = position of u in the ordering. Complexity: O(|V| + |E|).
 
-3. **Coordenada Y** (`index.cpp`): Heuristica de Kornaropoulos -- segunda ordenacao topologica onde, a cada passo, seleciona-se a raiz com maior x_rank (max-heap). Minimiza localmente o numero de falsos-positivos. Complexidade: O(|V| log |V| + |E|).
+3. **Y coordinate** (`index.cpp`): Kornaropoulos heuristic -- a second topological sort where, at each step, the root with the largest x_rank is selected (max-heap). Locally minimizes the number of false positives. Complexity: O(|V| log |V| + |E|).
 
-4. **Intervalos min-post** (`index.cpp`): DFS **iterativa** extrai spanning tree/forest e calcula post-order. `interval_end[u] = post_order[u]`. `interval_start[u] = min(interval_start[filhos])` ou `interval_end[u]` se folha. Checagem: `I_v ⊆ I_u` <=> `start[u] <= start[v] && end[v] <= end[u]`. Complexidade: O(|V| + |E|).
+4. **Min-post intervals** (`index.cpp`): **iterative** DFS extracts a spanning tree/forest and computes post-order. `interval_end[u] = post_order[u]`. `interval_start[u] = min(interval_start[children])`, or `interval_end[u]` if a leaf. Check: `I_v ⊆ I_u` <=> `start[u] <= start[v] && end[v] <= end[u]`. Complexity: O(|V| + |E|).
 
-5. **Niveis** (`index.cpp`): processa vertices em ordem topologica. `level[v] = 0` se raiz, senao `level[v] = max(level[u] + 1)` para predecessores u. Complexidade: O(|V| + |E|).
+5. **Levels** (`index.cpp`): processes vertices in topological order. `level[v] = 0` if a root, otherwise `level[v] = max(level[u] + 1)` over predecessors u. Complexity: O(|V| + |E|).
 
-### Algoritmo de consulta (Algorithm 3 do artigo)
+### Query algorithm (Algorithm 3 from the paper)
 
-Para `reachable(u, v)`, DFS **iterativa** com tres filtros de poda:
+For `reachable(u, v)`, an **iterative** DFS with three pruning filters:
 
-1. **Positive-cut**: se `I_v ⊆ I_u` -> retorna true (O(1))
-2. **Reflexividade**: se `u == v` -> retorna true
-3. **Negative-cut + level filter**: se `x[u] <= x[v] AND y[u] <= y[v] AND level[u] < level[v]`, explora sucessores; senao, poda o ramo
+1. **Positive-cut**: if `I_v ⊆ I_u` -> return true (O(1))
+2. **Reflexivity**: if `u == v` -> return true
+3. **Negative-cut + level filter**: if `x[u] <= x[v] AND y[u] <= y[v] AND level[u] < level[v]`, explore successors; otherwise, prune the branch
 
-Todos os algoritmos usam stacks explicitas (nunca recursao) para suportar grafos com milhoes de vertices sem stack overflow.
+All algorithms use explicit stacks (never recursion) to support graphs with millions of vertices without stack overflow.
 
-## Requisitos
+## Requirements
 
-- C++17 (g++ >= 7 ou clang++ >= 5)
+- C++17 (g++ >= 7 or clang++ >= 5)
 - CMake >= 3.14
-- Python 3 com `matplotlib` e `numpy` (apenas para visualizacao)
+- Python 3 with `matplotlib` and `numpy` (visualization only)
 
-## Compilacao
+## Building
 
 ```bash
 mkdir build && cd build
@@ -89,55 +91,55 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 ```
 
-Para compilacao com sanitizers de debug:
+For a debug build with sanitizers:
 
 ```bash
 cmake .. -DCMAKE_BUILD_TYPE=Debug
 make -j$(nproc)
 ```
 
-## Testes
+## Tests
 
-Executar da raiz do projeto (os testes referenciam caminhos relativos):
+Run from the project root (tests reference relative paths):
 
 ```bash
-cd /caminho/para/feline
+cd /path/to/feline
 ./build/feline_tests
 ```
 
-Os 16 testes unitarios cobrem:
+The 16 unit tests cover:
 
-| Grupo | Testes | O que verifica |
-|-------|--------|----------------|
-| Carga do grafo | 2 | n, m corretos; adjacencia CSR |
-| Condensacao SCC | 2 | DAG puro: identidade; ciclico: SCCs corretos, DAG condensado |
-| Coordenadas X | 1 | Para toda aresta (u,v): x_rank[u] < x_rank[v]; ranks unicos em [0,n) |
-| Coordenadas Y | 1 | Para toda aresta (u,v): y_rank[u] < y_rank[v]; ranks unicos |
-| Intervalos min-post | 1 | Raiz contem todos intervalos; folhas: start == end |
-| Niveis | 2 | Raizes com level 0; level cresce ao longo das arestas |
-| Consultas | 4 | Casos especificos em cada grafo de teste |
-| Exaustivo (BFS oracle) | 2 | Todos os pares verificados contra BFS naive |
-| Exportacao CSV | 1 | CSV gerado tem todos os vertices com valores corretos |
+| Group | Tests | What it verifies |
+|-------|-------|------------------|
+| Graph loading | 2 | correct n, m; CSR adjacency |
+| SCC condensation | 2 | pure DAG: identity; cyclic: correct SCCs, condensed DAG |
+| X coordinates | 1 | for every edge (u,v): x_rank[u] < x_rank[v]; unique ranks in [0,n) |
+| Y coordinates | 1 | for every edge (u,v): y_rank[u] < y_rank[v]; unique ranks |
+| Min-post intervals | 1 | root contains all intervals; leaves: start == end |
+| Levels | 2 | roots at level 0; level grows along edges |
+| Queries | 4 | specific cases on each test graph |
+| Exhaustive (BFS oracle) | 2 | all pairs verified against naive BFS |
+| CSV export | 1 | generated CSV has all vertices with correct values |
 
-Grafos de teste em `test/test_data/`: diamond (4v), chain (5v), tree (7v), cyclic (6v com 2 SCCs).
+Test graphs in `test/test_data/`: diamond (4v), chain (5v), tree (7v), cyclic (6v with 2 SCCs).
 
-## Uso
+## Usage
 
-### Processar consultas de alcancabilidade
-
-```bash
-./build/feline <grafo> <consultas> [saida]
-```
-
-Exemplo:
+### Process reachability queries
 
 ```bash
-./build/feline test/test_data/diamond.txt queries.txt resultados.txt
+./build/feline <graph> <queries> [output]
 ```
 
-Se o arquivo de saida for omitido, os resultados nao sao gravados (util para medir apenas o tempo).
+Example:
 
-A saida no stderr mostra tempos de cada fase:
+```bash
+./build/feline test/test_data/diamond.txt queries.txt results.txt
+```
+
+If the output file is omitted, results are not written (useful for timing only).
+
+The stderr output shows per-phase timings:
 
 ```
 Loading graph: test/test_data/diamond.txt
@@ -151,33 +153,33 @@ Processing queries: queries.txt
 Total time: 0.70 ms
 ```
 
-### Exportar indice para visualizacao
+### Export the index for visualization
 
 ```bash
-./build/feline --export-index <grafo> <indice.csv>
+./build/feline --export-index <graph> <index.csv>
 ```
 
-Exemplo:
+Example:
 
 ```bash
 ./build/feline --export-index test/test_data/diamond.txt index.csv
 ```
 
-### Gerar consultas com gabarito BFS
+### Generate queries with a BFS ground truth
 
-Gera pares aleatorios de vertices e executa BFS exaustiva para determinar a alcancabilidade real de cada par. O resultado e um arquivo com o gabarito (ground truth).
+Generates random vertex pairs and runs an exhaustive BFS to determine the actual reachability of each pair. The result is a file with the ground truth.
 
 ```bash
-./build/feline --gen-queries <grafo> <saida.txt> <num_queries> [seed]
+./build/feline --gen-queries <graph> <output.txt> <num_queries> [seed]
 ```
 
-Exemplo:
+Example:
 
 ```bash
 ./build/feline --gen-queries test/test_data/diamond.txt queries_bfs.txt 1000
 ```
 
-O arquivo gerado tem o formato `origem destino resultado`:
+The generated file has the format `source destination result`:
 
 ```
 1 3 1
@@ -186,23 +188,23 @@ O arquivo gerado tem o formato `origem destino resultado`:
 0 0 1
 ```
 
-O parametro `seed` (padrao: 42) controla a geracao aleatoria para reprodutibilidade.
+The `seed` parameter (default: 42) controls the random generation for reproducibility.
 
-### Verificar FELINE contra gabarito BFS
+### Verify FELINE against the BFS ground truth
 
-Dado um arquivo de consultas com gabarito (gerado pelo comando anterior), executa o FELINE sobre cada consulta e compara o resultado com o esperado.
+Given a query file with a ground truth (produced by the command above), runs FELINE on each query and compares the result with the expected one.
 
 ```bash
-./build/feline --verify <grafo> <consultas_com_gabarito.txt>
+./build/feline --verify <graph> <queries_with_ground_truth.txt>
 ```
 
-Exemplo:
+Example:
 
 ```bash
 ./build/feline --verify test/test_data/diamond.txt queries_bfs.txt
 ```
 
-Saida:
+Output:
 
 ```
 === Verification Results ===
@@ -216,33 +218,41 @@ Wrong:              0 (0.00%)
 Verification time:  0.09 ms (0.0046 ms/query)
 ```
 
-Em caso de erros, o relatorio detalha falsos positivos (FELINE=1, BFS=0) e falsos negativos (FELINE=0, BFS=1). O comando retorna codigo de saida 1 se houver erros.
+On errors, the report details false positives (FELINE=1, BFS=0) and false negatives (FELINE=0, BFS=1). The command exits with code 1 if any errors are found.
 
-### Visualizar o indice 2D
+### Visualize the 2D index
 
 ```bash
-python3 tools/plot_index.py index.csv -o grafico.png --edges grafo.txt
+python3 tools/plot_index.py index.csv -o chart.png --edges graph.txt
 ```
 
-Opcoes:
-- `-o arquivo.png` -- salvar em arquivo (PNG/SVG/PDF). Se omitido, abre janela interativa.
-- `--edges grafo.txt` -- desenhar arestas do grafo como setas.
-- `--no-labels` -- ocultar rotulos dos vertices (recomendado para grafos grandes).
+Options:
+- `-o file.png` -- save to a file (PNG/SVG/PDF). If omitted, opens an interactive window.
+- `--edges graph.txt` -- draw the graph edges as arrows.
+- `--no-labels` -- hide vertex labels (recommended for large graphs).
 
-## Formatos de arquivo
+### Convert adjacency-list graphs
 
-### Grafo de entrada
+Some datasets are distributed in adjacency-list format. The `convert_adjlist` tool converts them to the edge-list format used by `feline`:
 
-Arquivo texto com lista de arestas. Vertices sao inteiros 0-indexados.
+```bash
+./build/convert_adjlist <input.gra> <output.txt>
+```
+
+## File formats
+
+### Input graph
+
+Text file with an edge list. Vertices are 0-indexed integers.
 
 ```
-<num_vertices> <num_arestas>
+<num_vertices> <num_edges>
 <u0> <v0>
 <u1> <v1>
 ...
 ```
 
-Exemplo (grafo diamante):
+Example (diamond graph):
 
 ```
 4 4
@@ -252,19 +262,19 @@ Exemplo (grafo diamante):
 2 3
 ```
 
-O grafo pode conter ciclos -- a condensacao SCC e aplicada automaticamente.
+The graph may contain cycles -- SCC condensation is applied automatically.
 
-### Arquivo de consultas (modo padrao)
+### Query file (default mode)
 
-Um par de vertices por linha:
+One vertex pair per line:
 
 ```
-<origem> <destino>
-<origem> <destino>
+<source> <destination>
+<source> <destination>
 ...
 ```
 
-Exemplo:
+Example:
 
 ```
 0 3
@@ -272,17 +282,17 @@ Exemplo:
 1 2
 ```
 
-### Arquivo de consultas com gabarito (modos --gen-queries / --verify)
+### Query file with ground truth (--gen-queries / --verify modes)
 
-Tres campos por linha: origem, destino e resultado da BFS (0 ou 1):
+Three fields per line: source, destination, and the BFS result (0 or 1):
 
 ```
-<origem> <destino> <alcancavel>
-<origem> <destino> <alcancavel>
+<source> <destination> <reachable>
+<source> <destination> <reachable>
 ...
 ```
 
-Exemplo:
+Example:
 
 ```
 1 3 1
@@ -291,9 +301,9 @@ Exemplo:
 0 0 1
 ```
 
-### Arquivo de saida
+### Output file
 
-Uma linha por consulta, com `1` (alcancavel) ou `0` (nao alcancavel):
+One line per query, with `1` (reachable) or `0` (not reachable):
 
 ```
 1
@@ -301,9 +311,9 @@ Uma linha por consulta, com `1` (alcancavel) ou `0` (nao alcancavel):
 0
 ```
 
-### CSV do indice exportado
+### Exported index CSV
 
-Cabecalho seguido de uma linha por vertice do DAG condensado:
+A header followed by one line per vertex of the condensed DAG:
 
 ```
 vertex,x,y,level
@@ -313,50 +323,52 @@ vertex,x,y,level
 3,3,3,2
 ```
 
-Campos:
-- `vertex` -- identificador do vertice no DAG condensado
-- `x` -- coordenada X (posicao na primeira ordenacao topologica)
-- `y` -- coordenada Y (posicao na ordenacao de Kornaropoulos)
-- `level` -- nivel do vertice (maior distancia a partir de uma raiz)
+Fields:
+- `vertex` -- vertex identifier in the condensed DAG
+- `x` -- X coordinate (position in the first topological sort)
+- `y` -- Y coordinate (position in the Kornaropoulos ordering)
+- `level` -- vertex level (longest distance from a root)
 
-## Estrutura do projeto
+## Project structure
 
 ```
 feline/
 ├── CMakeLists.txt          # Build system
-├── README.md               # Este arquivo
+├── README.md               # This file (English)
+├── README.pt-BR.md         # Portuguese version
 ├── include/feline/
-│   ├── graph.hpp           # Grafo CSR, condensacao SCC
-│   ├── index.hpp           # Indice FELINE
-│   ├── query.hpp           # Motor de consultas, BFS oracle, verificacao
-│   └── timer.hpp           # Medicao de tempo
+│   ├── graph.hpp           # CSR graph, SCC condensation
+│   ├── index.hpp           # FELINE index
+│   ├── query.hpp           # Query engine, BFS oracle, verification
+│   └── timer.hpp           # Time measurement
 ├── src/
-│   ├── graph.cpp           # Carga de grafos + Tarjan iterativo
-│   ├── index.cpp           # X, Y, intervalos min-post, niveis
-│   ├── query.cpp           # Algorithm 3 (DFS iterativa com poda), BFS oracle, geracao e verificacao
+│   ├── graph.cpp           # Graph loading + iterative Tarjan
+│   ├── index.cpp           # X, Y, min-post intervals, levels
+│   ├── query.cpp           # Algorithm 3 (iterative pruned DFS), BFS oracle, generation and verification
 │   └── main.cpp            # CLI (query, export-index, gen-queries, verify)
 ├── tools/
-│   └── plot_index.py       # Visualizacao 2D com matplotlib
+│   ├── convert_adjlist.cpp # Adjacency-list to edge-list converter
+│   └── plot_index.py       # 2D visualization with matplotlib
 └── test/
-    ├── test_main.cpp       # 16 testes unitarios
-    └── test_data/          # Grafos de teste
-        ├── diamond.txt     # DAG diamante (4 vertices)
-        ├── chain.txt       # Cadeia linear (5 vertices)
-        ├── tree.txt        # Arvore binaria (7 vertices)
-        └── cyclic.txt      # Grafo com ciclos (6 vertices, 2 SCCs)
+    ├── test_main.cpp       # 16 unit tests
+    └── test_data/          # Test graphs
+        ├── diamond.txt     # diamond DAG (4 vertices)
+        ├── chain.txt       # linear chain (5 vertices)
+        ├── tree.txt        # binary tree (7 vertices)
+        └── cyclic.txt      # graph with cycles (6 vertices, 2 SCCs)
 ```
 
-## Complexidade
+## Complexity
 
-| Operacao | Tempo | Espaco |
-|----------|-------|--------|
-| Condensacao SCC | O(\|V\| + \|E\|) | O(\|V\| + \|E\|) |
-| Construcao do indice | O(\|V\| log \|V\| + \|E\|) | O(\|V\|) |
-| Consulta (negative-cut) | O(1) | - |
-| Consulta (positive-cut) | O(1) | - |
-| Consulta (pior caso) | O(\|V\| + \|E\|) | O(\|V\|) |
+| Operation | Time | Space |
+|-----------|------|-------|
+| SCC condensation | O(\|V\| + \|E\|) | O(\|V\| + \|E\|) |
+| Index construction | O(\|V\| log \|V\| + \|E\|) | O(\|V\|) |
+| Query (negative-cut) | O(1) | - |
+| Query (positive-cut) | O(1) | - |
+| Query (worst case) | O(\|V\| + \|E\|) | O(\|V\|) |
 
-## Referencia
+## Reference
 
 ```bibtex
 @inproceedings{veloso2014feline,

@@ -17,38 +17,60 @@ static inline uint32_t coord(const DynIndex& idx, Coord c, vertex_t r) {
     return c == Coord::X ? idx.x(r) : idx.y(r);
 }
 
-// δ on coordinate `c`: the bidirectional fixpoint closure of {a, b} bounded by the
-// coordinate band (coord(b), coord(a)). Starting from {a, b}, repeatedly pull in any
-// predecessor p of an included vertex with coord(p) > coord(b), and any successor s
-// of an included vertex with coord(s) < coord(a), until no more vertices qualify.
-//
-// A single "ancestors of a" ∪ "descendants of b" closure (filtered by position) is
-// NOT sufficient: an ancestor of `a` can have an edge to a vertex w that is neither
-// an ancestor of `a` nor a descendant of `b`, yet whose old coordinate still lies
-// inside the band. Excluding w leaves it fixed while its neighbor gets reassigned to
-// a new slot inside the band, which can invert their relative order and break that
-// live edge. Confirmed by a random-DAG stress test: inserting edge (13,15) where
-// y(13) > y(15) triggers a Y-reorder; vertex 10 is an ancestor of 13 (so it enters
-// the naive δ) with a side edge 10->6; vertex 6 is unrelated to both 13 and 15 but
-// sits at y=9, inside the (y(15)=0, y(13)=14) band. The naive δ excludes 6, and the
-// reorder moves 10 to y=10 > 9, breaking the live edge 10->6. Closing δ under BOTH
-// predecessor and successor edges (not just "ancestor of a" / "descendant of b") of
-// every member, bounded by the band, pulls 6 in too and fixes this.
-static std::vector<vertex_t> build_delta(const DynamicGraph& g, const DynIndex& idx,
-                                         Coord c, vertex_t a, vertex_t b) {
-    std::unordered_set<vertex_t> delta_set;
+// Naive δ on coordinate `c`, per the thesis's original reorder scheme (no bidirectional
+// closure). Two flavors, selected by `follow_pred`:
+//   - Sig_B (follow_pred = true): {a} ∪ ancestors of `a` (via dag_pred) whose coord on
+//     `c` is > lo. DFS from `start` = a, recursing into a predecessor p only if
+//     coord(p) > lo.
+//   - Sig_F (follow_pred = false): {b} ∪ descendants of `b` (via dag_succ) whose coord
+//     on `c` is < hi. DFS from `start` = b, recursing into a successor s only if
+//     coord(s) < hi.
+// Explicit stack, no recursion; visited set dedupes.
+static std::vector<vertex_t> collect_in_band(const DynamicGraph& g, const DynIndex& idx,
+                                             Coord c, vertex_t start, uint32_t lo,
+                                             uint32_t hi, bool follow_pred) {
+    std::unordered_set<vertex_t> visited;
+    std::vector<vertex_t> out;
     std::vector<vertex_t> stk;
-    uint32_t lo = coord(idx, c, b), hi = coord(idx, c, a);
-    delta_set.insert(a); stk.push_back(a);
-    delta_set.insert(b); stk.push_back(b);
+    visited.insert(start);
+    stk.push_back(start);
     while (!stk.empty()) {
         vertex_t w = stk.back(); stk.pop_back();
-        for (vertex_t p : g.dag_pred(w))
-            if (coord(idx, c, p) > lo && delta_set.insert(p).second) stk.push_back(p);
-        for (vertex_t s : g.dag_succ(w))
-            if (coord(idx, c, s) < hi && delta_set.insert(s).second) stk.push_back(s);
+        out.push_back(w);
+        if (follow_pred) {
+            for (vertex_t p : g.dag_pred(w))
+                if (coord(idx, c, p) > lo && visited.insert(p).second) stk.push_back(p);
+        } else {
+            for (vertex_t s : g.dag_succ(w))
+                if (coord(idx, c, s) < hi && visited.insert(s).second) stk.push_back(s);
+        }
     }
-    return std::vector<vertex_t>(delta_set.begin(), delta_set.end());
+    return out;
+}
+
+// Structured merge rank on coordinate `c`: every Sig_B vertex ranks below every Sig_F
+// vertex; within each group, ascending by current coord(idx, c, ·). Combined with
+// DynIndex::permute (which reassigns δ to the sorted list of its OWN old slots on `c`,
+// in this rank order), this sends δ_in = Sig_B to the lowest slots and δ_out = Sig_F to
+// the highest slots, each preserving its members' relative old-coordinate order. That
+// structure is what makes the naive (non-closure) δ safe: every δ_in vertex's slot only
+// decreases and every δ_out vertex's slot only increases, so an edge from a δ_in vertex
+// to a vertex OUTSIDE δ (which keeps its old slot, inside or above the band) can't be
+// inverted, and symmetrically for δ_out -> outside edges.
+static std::vector<uint32_t> merge_rank(const DynIndex& idx, Coord c,
+                                        const std::vector<vertex_t>& delta,
+                                        const std::unordered_set<vertex_t>& sigB) {
+    std::vector<uint32_t> order(delta.size());
+    for (uint32_t i = 0; i < delta.size(); ++i) order[i] = i;
+    std::sort(order.begin(), order.end(), [&](uint32_t p, uint32_t q) {
+        bool fp = !sigB.count(delta[p]); // false (0) = Sig_B, true (1) = Sig_F
+        bool fq = !sigB.count(delta[q]);
+        if (fp != fq) return fp < fq;
+        return coord(idx, c, delta[p]) < coord(idx, c, delta[q]);
+    });
+    std::vector<uint32_t> rank(delta.size());
+    for (uint32_t k = 0; k < order.size(); ++k) rank[order[k]] = k;
+    return rank;
 }
 
 } // namespace
@@ -74,6 +96,13 @@ static std::vector<uint32_t> identity_rank(const DynIndex& idx, Coord c,
 // Builds δ and reorders it. Precondition: a = r(u), b = r(v), a != b, edge does not
 // create a cycle (b does not reach a). Adds (a,b) to E_DAG and permutes δ in X and Y.
 //
+// Thesis-faithful reorder: for each violated axis, δ is the NAIVE union of δ_in =
+// Sig_B = {a} ∪ ancestors-of-a in the (coord(b), coord(a)] band and δ_out = Sig_F =
+// {b} ∪ descendants-of-b in the [coord(b), coord(a)) band — no bidirectional closure.
+// The merge-rank sends every δ_in vertex to the lowest slots of the band and every
+// δ_out vertex to the highest, each group preserving its members' old relative order
+// (see merge_rank's comment for why this makes the naive δ safe).
+//
 // X and Y are reordered in two INDEPENDENT phases, each with its own δ filtered on
 // a single coordinate. Combining both coordinates into one shared δ (filtered by
 // "x(w) > x(b) || y(w) > y(b)") and permuting X and Y together from that shared δ is
@@ -86,6 +115,27 @@ static std::vector<uint32_t> identity_rank(const DynIndex& idx, Coord c,
 // live edge 5->8 on X even though X was never violated). Splitting into two
 // single-axis phases — each leaving the other axis untouched via identity_rank() —
 // keeps every δ within the classical bounded ancestor/descendant band per axis.
+static void reorder_axis(DynamicGraph& g, DynIndex& idx, Coord c, vertex_t a, vertex_t b) {
+    uint32_t lo = coord(idx, c, b), hi = coord(idx, c, a);
+    std::vector<vertex_t> sig_b = collect_in_band(g, idx, c, a, lo, hi, /*follow_pred=*/true);
+    std::vector<vertex_t> sig_f = collect_in_band(g, idx, c, b, lo, hi, /*follow_pred=*/false);
+
+    std::unordered_set<vertex_t> sigB_membership(sig_b.begin(), sig_b.end());
+    std::vector<vertex_t> delta = sig_b;
+    for (vertex_t w : sig_f)
+        if (!sigB_membership.count(w)) delta.push_back(w); // dedupe: keep as Sig_B if overlap
+
+    feline::XYOrdering sub;
+    if (c == Coord::X) {
+        sub.x_rank = merge_rank(idx, Coord::X, delta, sigB_membership);
+        sub.y_rank = identity_rank(idx, Coord::Y, delta); // leave Y untouched
+    } else {
+        sub.y_rank = merge_rank(idx, Coord::Y, delta, sigB_membership);
+        sub.x_rank = identity_rank(idx, Coord::X, delta); // leave X untouched
+    }
+    idx.permute(delta, sub);
+}
+
 static void reorder_acyclic(DynamicGraph& g, DynIndex& idx, vertex_t a, vertex_t b) {
     // A reorder is only needed on an axis where the new edge violates the current
     // order, i.e., x(a) > x(b) or y(a) > y(b). If both already hold (a before b on
@@ -95,18 +145,8 @@ static void reorder_acyclic(DynamicGraph& g, DynIndex& idx, vertex_t a, vertex_t
     g.dag_add_edge(a, b);
     if (!x_bad && !y_bad) return;
 
-    if (x_bad) {
-        std::vector<vertex_t> delta_x = build_delta(g, idx, Coord::X, a, b);
-        feline::XYOrdering sub = build_suborder(g, delta_x);
-        sub.y_rank = identity_rank(idx, Coord::Y, delta_x); // leave Y untouched
-        idx.permute(delta_x, sub);
-    }
-    if (y_bad) {
-        std::vector<vertex_t> delta_y = build_delta(g, idx, Coord::Y, a, b);
-        feline::XYOrdering sub = build_suborder(g, delta_y);
-        sub.x_rank = identity_rank(idx, Coord::X, delta_y); // leave X untouched
-        idx.permute(delta_y, sub);
-    }
+    if (x_bad) reorder_axis(g, idx, Coord::X, a, b);
+    if (y_bad) reorder_axis(g, idx, Coord::Y, a, b);
 }
 
 void FelinePK::insert_vertex(vertex_t v) {

@@ -353,14 +353,23 @@ feline/
 │   ├── query.cpp           # Algorithm 3 (DFS iterativa com poda), BFS oracle, geracao e verificacao
 │   └── main.cpp            # CLI (query, export-index, gen-queries, verify)
 ├── tools/
+│   ├── convert_adjlist.cpp # Conversor lista de adjacencia -> lista de arestas
 │   └── plot_index.py       # Visualizacao 2D com matplotlib
-└── test/
-    ├── test_main.cpp       # 16 testes unitarios
-    └── test_data/          # Grafos de teste
-        ├── diamond.txt     # DAG diamante (4 vertices)
-        ├── chain.txt       # Cadeia linear (5 vertices)
-        ├── tree.txt        # Arvore binaria (7 vertices)
-        └── cyclic.txt      # Grafo com ciclos (6 vertices, 2 SCCs)
+├── test/
+│   ├── test_main.cpp       # 16 testes unitarios
+│   └── test_data/          # Grafos de teste
+│       ├── diamond.txt     # DAG diamante (4 vertices)
+│       ├── chain.txt       # Cadeia linear (5 vertices)
+│       ├── tree.txt        # Arvore binaria (7 vertices)
+│       └── cyclic.txt      # Grafo com ciclos (6 vertices, 2 SCCs)
+├── dynamic/                # Extensao dinamica (Feline-PK) -- subprojeto opcional
+│   ├── README.md           # Documentacao do indice dinamico
+│   ├── include/feline_dyn/ # Grafo mutavel, union-find, ordenacoes, consulta, fachada
+│   ├── src/                # Implementacao do Feline-PK
+│   ├── test/               # Testes unitarios + de estresse com oraculo
+│   └── tools/              # dyn_demo, dyn_incremental
+└── docs/
+    └── notes/
 ```
 
 ## Complexidade
@@ -372,6 +381,34 @@ feline/
 | Consulta (negative-cut) | O(1) | - |
 | Consulta (positive-cut) | O(1) | - |
 | Consulta (pior caso) | O(\|V\| + \|E\|) | O(\|V\|) |
+
+## Indice dinamico (Feline-PK)
+
+O indice estatico acima e construido uma vez para um grafo fixo. O subprojeto
+**`dynamic/`** implementa o **Feline-PK** (Capitulo 4 da tese): mantem o indice de forma
+**incremental** conforme o grafo muda, em vez de reconstrui-lo a cada atualizacao.
+
+Primeiro incremento (implementado e verificado por oraculo): insercao/remocao de vertice
+desconectado (Alg. 7/8), insercao de aresta com reordenacao incremental da regiao afetada
+(Alg. 10) e **dobra de SCC** quando uma aresta fecha um ciclo (Alg. 9/10), alem da
+consulta dinamica por coordenadas. Remocao de aresta (Alg. 11) e insercao em lote
+(Alg. 12–14) sao trabalhos futuros.
+
+O subprojeto e **desligado por padrao**; o build estatico nao muda a menos que voce o
+habilite:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFELINE_BUILD_DYNAMIC=ON
+cmake --build build -j"$(nproc)"
+./build/dynamic/feline_dyn_tests          # testes unitarios + estresse com oraculo BFS
+./build/dynamic/dyn_incremental test/test_data/cyclic.txt   # observa a construcao incremental
+```
+
+Veja [`dynamic/README.md`](dynamic/README.md) para detalhes. A corretude e verificada
+contra um oraculo BFS de todos os pares apos cada insercao, incluindo testes de estresse
+aleatorizados (ate milhares de dobras de SCC em digrafos aleatorios densos).
+
+
 
 ## Referencia
 

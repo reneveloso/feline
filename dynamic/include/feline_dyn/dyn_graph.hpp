@@ -37,6 +37,9 @@ public:
     void remove_vertex(vertex_t v);      // v must be isolated in E
     bool has_vertex(vertex_t v) const;
     void add_edge(vertex_t u, vertex_t v);
+    bool has_edge(vertex_t u, vertex_t v) const;
+    void remove_edge(vertex_t u, vertex_t v);   // no-op if the edge is absent
+    const std::unordered_map<vertex_t, VertexSet>& out_all() const { return e_out_; }
     const VertexSet& succ(vertex_t v) const;
     const VertexSet& pred(vertex_t v) const;
 

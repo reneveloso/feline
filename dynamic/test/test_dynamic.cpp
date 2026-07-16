@@ -437,6 +437,27 @@ void test_incremental_from_graph() {
     run_incremental_from_file("cyclic");
 }
 
+void test_dynamic_graph_remove_edge() {
+    DynamicGraph g;
+    for (vertex_t v = 0; v < 3; ++v) g.add_vertex(v);
+    g.add_edge(0, 1);
+    g.add_edge(0, 2);
+    ASSERT(g.has_edge(0, 1) && g.has_edge(0, 2), "dg-rm: edges present");
+    ASSERT(!g.has_edge(1, 0), "dg-rm: reverse edge absent");
+    ASSERT(!g.has_edge(7, 8), "dg-rm: unknown vertices -> no edge");
+
+    g.remove_edge(0, 1);
+    ASSERT(!g.has_edge(0, 1), "dg-rm: edge removed");
+    ASSERT(!g.succ(0).count(1), "dg-rm: out adjacency cleaned");
+    ASSERT(!g.pred(1).count(0), "dg-rm: in adjacency cleaned");
+    ASSERT(g.has_edge(0, 2), "dg-rm: other edge intact");
+
+    g.remove_edge(0, 1);   // idempotent
+    g.remove_edge(7, 8);   // unknown vertices: must not crash
+    ASSERT(g.has_edge(0, 2), "dg-rm: still intact after no-op removals");
+    ASSERT(g.out_all().size() == 3, "dg-rm: out_all exposes every vertex");
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -455,6 +476,7 @@ int main() {
     RUN_TEST(test_insert_edge_cycle_stress);
     RUN_TEST(test_random_insertions_oracle);
     RUN_TEST(test_incremental_from_graph);
+    RUN_TEST(test_dynamic_graph_remove_edge);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

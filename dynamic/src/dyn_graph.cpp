@@ -76,6 +76,18 @@ void DynamicGraph::add_edge(vertex_t u, vertex_t v) {
     e_in_[v].insert(u);
 }
 
+bool DynamicGraph::has_edge(vertex_t u, vertex_t v) const {
+    auto it = e_out_.find(u);
+    return it != e_out_.end() && it->second.count(v) > 0;
+}
+
+void DynamicGraph::remove_edge(vertex_t u, vertex_t v) {
+    auto iu = e_out_.find(u);
+    if (iu != e_out_.end()) iu->second.erase(v);
+    auto iv = e_in_.find(v);
+    if (iv != e_in_.end()) iv->second.erase(u);
+}
+
 const VertexSet& DynamicGraph::succ(vertex_t v) const {
     auto it = e_out_.find(v);
     return it == e_out_.end() ? kEmpty : it->second;

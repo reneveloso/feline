@@ -1,5 +1,6 @@
 #include "test_util.hpp"
 #include "oracle.hpp"
+#include "feline/graph.hpp"
 #include "feline_dyn/dyn_graph.hpp"
 #include "feline_dyn/dyn_index.hpp"
 #include "feline_dyn/dyn_query.hpp"
@@ -9,6 +10,7 @@
 #include <cstdio>
 #include <numeric>
 #include <random>
+#include <string>
 #include <vector>
 
 void test_skeleton() {
@@ -356,6 +358,52 @@ void test_random_insertions_oracle() {
     }
 }
 
+// Build FelinePK incrementally (vertex-by-vertex, then edge-by-edge in CSR order)
+// from the same graph files used by the STATIC Feline tests, cross-checking
+// all-pairs reachability against a BFS oracle after every single edge insertion.
+// This exercises incremental construction from real static-test graphs, including
+// SCC folding on cyclic.txt.
+static void run_incremental_from_file(const std::string& name) {
+    std::string path = "test/test_data/" + name + ".txt";
+    feline::CSRGraph g = feline::load_graph(path);
+
+    FelinePK pk;
+    DynamicGraph oracle_g;
+    for (feline_dyn::vertex_t v = 0; v < g.n; ++v) {
+        pk.insert_vertex(v);
+        oracle_g.add_vertex(v);
+    }
+
+    for (feline::vertex_t u = 0; u < g.n; ++u) {
+        for (feline::edge_t e = g.out_begin[u]; e < g.out_begin[u + 1]; ++e) {
+            feline::vertex_t v = g.out_adj[e];
+            pk.insert_edge(u, v);
+            oracle_g.add_edge(u, v);
+            for (feline_dyn::vertex_t a = 0; a < g.n; ++a) {
+                for (feline_dyn::vertex_t b = 0; b < g.n; ++b) {
+                    bool expected = dyntest::bfs_reachable(oracle_g, a, b);
+                    bool got = pk.reachable(a, b);
+                    if (got != expected) {
+                        std::fprintf(stderr,
+                            "    incremental mismatch: graph=%s edge=(%u,%u) "
+                            "pair=(%u,%u) expected=%d got=%d\n",
+                            name.c_str(), u, v, a, b, (int)expected, (int)got);
+                    }
+                    ASSERT(got == expected,
+                           ("incremental oracle mismatch: " + name).c_str());
+                }
+            }
+        }
+    }
+}
+
+void test_incremental_from_graph() {
+    run_incremental_from_file("diamond");
+    run_incremental_from_file("chain");
+    run_incremental_from_file("tree");
+    run_incremental_from_file("cyclic");
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -372,6 +420,7 @@ int main() {
     RUN_TEST(test_insert_edge_cycle_oracle);
     RUN_TEST(test_insert_edge_cycle_stress);
     RUN_TEST(test_random_insertions_oracle);
+    RUN_TEST(test_incremental_from_graph);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

@@ -16,3 +16,6 @@ add_test(NAME feline_dyn_tests COMMAND feline_dyn_tests
 
 add_executable(dyn_demo tools/dyn_demo.cpp)
 target_link_libraries(dyn_demo PRIVATE feline_dyn)
+
+add_executable(dyn_incremental tools/dyn_incremental.cpp)
+target_link_libraries(dyn_incremental PRIVATE feline_dyn)

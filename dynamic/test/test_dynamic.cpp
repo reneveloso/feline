@@ -577,6 +577,50 @@ void test_remove_internal_edge_without_split() {
     ASSERT(pk.reachable(2, 1) && pk.reachable(0, 2), "no-split: all pairs still reachable");
 }
 
+void test_remove_edge_split_with_external_boundary() {
+    // 0 -> 1 (external predecessor into the component)
+    // SCC {1,2,3}: 1->2, 2->3, 3->1
+    // 3 -> 4 (external successor out of the component)
+    FelinePK pk;
+    for (vertex_t v = 0; v < 5; ++v) pk.insert_vertex(v);
+    pk.insert_edge(0, 1);
+    pk.insert_edge(1, 2); pk.insert_edge(2, 3); pk.insert_edge(3, 1);
+    pk.insert_edge(3, 4);
+
+    ASSERT(pk.reachable(0, 4), "split-ext: 0 reaches 4 before removal");
+    ASSERT(pk.reachable(0, 2), "split-ext: 0 reaches 2 before removal");
+    ASSERT(pk.reachable(2, 4), "split-ext: 2 reaches 4 before removal");
+    ASSERT(pk.reachable(3, 1) && pk.reachable(1, 3), "split-ext: {1,2,3} one SCC before removal");
+
+    pk.remove_edge(3, 1);   // breaks the cycle -> chain 1->2->3
+
+    // Chain survives.
+    ASSERT(pk.reachable(1, 2), "split-ext: chain 1->2 intact");
+    ASSERT(pk.reachable(2, 3), "split-ext: chain 2->3 intact");
+    ASSERT(pk.reachable(1, 3), "split-ext: chain 1->3 intact");
+
+    // Cycle is gone.
+    ASSERT(!pk.reachable(3, 1), "split-ext: 3 no longer reaches 1");
+    ASSERT(!pk.reachable(2, 1), "split-ext: 2 no longer reaches 1");
+    ASSERT(!pk.reachable(3, 2), "split-ext: 3 no longer reaches 2");
+
+    // Inbound boundary still works (pins the pred(w) reinsertion loop).
+    ASSERT(pk.reachable(0, 1), "split-ext: inbound boundary 0->1 survives split");
+    ASSERT(pk.reachable(0, 2), "split-ext: inbound boundary 0->2 survives split");
+    ASSERT(pk.reachable(0, 3), "split-ext: inbound boundary 0->3 survives split");
+    ASSERT(pk.reachable(0, 4), "split-ext: inbound boundary 0->4 survives split");
+
+    // Outbound boundary still works (pins the succ(w) reinsertion loop).
+    ASSERT(pk.reachable(1, 4), "split-ext: outbound boundary 1->4 survives split");
+    ASSERT(pk.reachable(2, 4), "split-ext: outbound boundary 2->4 survives split");
+    ASSERT(pk.reachable(3, 4), "split-ext: outbound boundary 3->4 survives split");
+
+    // Nothing spurious appeared.
+    ASSERT(!pk.reachable(4, 0), "split-ext: no spurious 4->0");
+    ASSERT(!pk.reachable(4, 3), "split-ext: no spurious 4->3");
+    ASSERT(!pk.reachable(1, 0), "split-ext: no spurious 1->0");
+}
+
 void test_remove_edge_noop_cases() {
     FelinePK pk;
     pk.insert_vertex(0); pk.insert_vertex(1);
@@ -615,6 +659,7 @@ int main() {
     RUN_TEST(test_remove_edge_different_components);
     RUN_TEST(test_remove_edge_keeps_dag_edge_while_a_parallel_edge_remains);
     RUN_TEST(test_remove_edge_splits_component);
+    RUN_TEST(test_remove_edge_split_with_external_boundary);
     RUN_TEST(test_remove_internal_edge_without_split);
     RUN_TEST(test_remove_edge_noop_cases);
     TEST_SUMMARY();

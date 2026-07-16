@@ -362,14 +362,12 @@ feline/
 │       ├── chain.txt       # Cadeia linear (5 vertices)
 │       ├── tree.txt        # Arvore binaria (7 vertices)
 │       └── cyclic.txt      # Grafo com ciclos (6 vertices, 2 SCCs)
-├── dynamic/                # Extensao dinamica (Feline-PK) -- subprojeto opcional
-│   ├── README.md           # Documentacao do indice dinamico
-│   ├── include/feline_dyn/ # Grafo mutavel, union-find, ordenacoes, consulta, fachada
-│   ├── src/                # Implementacao do Feline-PK
-│   ├── test/               # Testes unitarios + de estresse com oraculo
-│   └── tools/              # dyn_demo, dyn_incremental
-└── docs/
-    └── notes/
+└── dynamic/                # Extensao dinamica -- subprojeto opcional
+    ├── README.md           # Documentacao do indice dinamico
+    ├── include/feline_dyn/ # Grafo mutavel, union-find, ordenacoes, consulta, fachada
+    ├── src/                # Implementacao
+    ├── test/               # Testes unitarios + de estresse com oraculo
+    └── tools/              # dyn_demo, dyn_incremental
 ```
 
 ## Complexidade
@@ -382,17 +380,14 @@ feline/
 | Consulta (positive-cut) | O(1) | - |
 | Consulta (pior caso) | O(\|V\| + \|E\|) | O(\|V\|) |
 
-## Indice dinamico (Feline-PK)
+## Indice dinamico
 
 O indice estatico acima e construido uma vez para um grafo fixo. O subprojeto
-**`dynamic/`** implementa o **Feline-PK** (Capitulo 4 da tese): mantem o indice de forma
-**incremental** conforme o grafo muda, em vez de reconstrui-lo a cada atualizacao.
-
-Primeiro incremento (implementado e verificado por oraculo): insercao/remocao de vertice
-desconectado (Alg. 7/8), insercao de aresta com reordenacao incremental da regiao afetada
-(Alg. 10) e **dobra de SCC** quando uma aresta fecha um ciclo (Alg. 9/10), alem da
-consulta dinamica por coordenadas. Remocao de aresta (Alg. 11) e insercao em lote
-(Alg. 12–14) sao trabalhos futuros.
+**`dynamic/`** mantem o indice de forma **incremental** conforme o grafo muda, em vez de
+reconstrui-lo a cada atualizacao: insercao/remocao de vertice desconectado, insercao de
+aresta com reordenacao incremental da regiao afetada e dobra de componentes fortemente
+conexos quando uma aresta fecha um ciclo, alem da consulta dinamica por coordenadas.
+Remocao de aresta e insercao em lote sao trabalhos futuros.
 
 O subprojeto e **desligado por padrao**; o build estatico nao muda a menos que voce o
 habilite:
@@ -407,8 +402,6 @@ cmake --build build -j"$(nproc)"
 Veja [`dynamic/README.md`](dynamic/README.md) para detalhes. A corretude e verificada
 contra um oraculo BFS de todos os pares apos cada insercao, incluindo testes de estresse
 aleatorizados (ate milhares de dobras de SCC em digrafos aleatorios densos).
-
-
 
 ## Referencia
 

@@ -363,14 +363,12 @@ feline/
 │       ├── chain.txt       # linear chain (5 vertices)
 │       ├── tree.txt        # binary tree (7 vertices)
 │       └── cyclic.txt      # graph with cycles (6 vertices, 2 SCCs)
-├── dynamic/                # Dynamic extension (Feline-PK) -- optional subproject
-│   ├── README.md           # Dynamic index docs
-│   ├── include/feline_dyn/ # Mutable graph, union-find, orderings, query, facade
-│   ├── src/                # Feline-PK implementation
-│   ├── test/               # Oracle-based unit + stress tests
-│   └── tools/              # dyn_demo, dyn_incremental
-└── docs/
-    └── notes/
+└── dynamic/                # Dynamic extension -- optional subproject
+    ├── README.md           # Dynamic index docs
+    ├── include/feline_dyn/ # Mutable graph, union-find, orderings, query, facade
+    ├── src/                # Implementation
+    ├── test/               # Oracle-based unit + stress tests
+    └── tools/              # dyn_demo, dyn_incremental
 ```
 
 ## Complexity
@@ -383,16 +381,14 @@ feline/
 | Query (positive-cut) | O(1) | - |
 | Query (worst case) | O(\|V\| + \|E\|) | O(\|V\|) |
 
-## Dynamic index (Feline-PK)
+## Dynamic index
 
 The static index above is built once for a fixed graph. The **`dynamic/`** subproject
-implements **Feline-PK** (thesis Chapter 4): it maintains the index **incrementally** as
-the graph changes, instead of rebuilding it on every update.
-
-First increment (implemented and oracle-verified): disconnected vertex insert/remove
-(Alg. 7/8), edge insertion with incremental reorder of the affected region (Alg. 10) and
-**SCC folding** when an edge closes a cycle (Alg. 9/10), and a coordinate-based dynamic
-query. Edge removal (Alg. 11) and batch insertion (Alg. 12–14) are future work.
+maintains the index **incrementally** as the graph changes, instead of rebuilding it on
+every update: disconnected vertex insert/remove, edge insertion with incremental reorder
+of the affected region and strongly-connected-component folding when an edge closes a
+cycle, and a coordinate-based dynamic query. Edge removal and batch insertion are future
+work.
 
 The subproject is **off by default**; the static build is unchanged unless you enable it:
 
@@ -406,8 +402,6 @@ cmake --build build -j"$(nproc)"
 See [`dynamic/README.md`](dynamic/README.md) for details. Correctness is verified against
 an all-pairs BFS oracle after every insertion, including randomized stress tests (up to
 thousands of SCC folds on dense random digraphs).
-
-
 
 ## Reference
 

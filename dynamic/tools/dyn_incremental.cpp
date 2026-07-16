@@ -68,7 +68,9 @@ int main(int argc, char** argv) {
     uint64_t edges_done = 0;
     double total_time_us = 0.0;
     double max_time_us = 0.0;
-    uint32_t prev_reps = pk.index().size();
+    // Number of representatives = number of vertices currently in the DAG.
+    // (index().size() counts every vertex ever inserted: folded members keep coordinates.)
+    uint32_t prev_reps = static_cast<uint32_t>(pk.graph().dag_out_all().size());
 
     for (feline::vertex_t u = 0; u < g.n; ++u) {
         for (feline::edge_t e = g.out_begin[u]; e < g.out_begin[u + 1]; ++e) {
@@ -82,7 +84,8 @@ int main(int argc, char** argv) {
             total_time_us += dt_us;
             if (dt_us > max_time_us) max_time_us = dt_us;
 
-            uint32_t cur_reps = pk.index().size();
+            const size_t reps = pk.graph().dag_out_all().size();
+            uint32_t cur_reps = static_cast<uint32_t>(reps);
             if (cur_reps < prev_reps) {
                 folds++;
                 reps_absorbed += (prev_reps - cur_reps);
@@ -106,7 +109,7 @@ int main(int argc, char** argv) {
     std::printf("\n=== SUMMARY ===\n");
     std::printf("n = %u\n", g.n);
     std::printf("m = %llu\n", static_cast<unsigned long long>(g.m));
-    std::printf("final reps = %u\n", pk.index().size());
+    std::printf("final reps = %u\n", static_cast<uint32_t>(pk.graph().dag_out_all().size()));
     std::printf("total folds = %llu (reps absorbed = %llu)\n",
                 static_cast<unsigned long long>(folds),
                 static_cast<unsigned long long>(reps_absorbed));

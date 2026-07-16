@@ -226,7 +226,7 @@ void FelinePK::fold_cycle(vertex_t u, vertex_t v, const std::vector<vertex_t>& v
     r_.unite(members, rprime);
 
     // Remove folded reps (except r') from the DAG vertex set. r' stays; the folded
-    // members are absorbed and their index slots freed by remove_many below.
+    // members are absorbed via union-find (r.find() maps them to r').
     for (vertex_t c : cyc) {
         if (c == rprime) continue;
         g_.dag_remove_vertex(c);
@@ -240,18 +240,16 @@ void FelinePK::fold_cycle(vertex_t u, vertex_t v, const std::vector<vertex_t>& v
     // Localized SCC-fold reposition (Alg. 10 lines 21-22): move r' locally instead
     // of rebuilding the whole index.
     //
-    // 1) Bulk-remove the folded members (all except r') from the index in a single
-    //    O(size) compaction. Queries never look these up directly — union-find maps
-    //    them to r'. r' stays in the index at a (now compacted) position.
-    std::vector<vertex_t> drop;
-    drop.reserve(members.size());
-    for (vertex_t c : members) if (c != rprime) drop.push_back(c);
-    idx_.remove_many(drop);
+    // Folded members leave the DAG but KEEP their coordinates: if an edge removal later
+    // splits this component, a re-elected representative resumes near its old position
+    // instead of being re-inserted at an extreme corner. Their coordinates are inert
+    // while they are not representatives (queries map through r.find() first, and
+    // reorders only walk E_DAG neighbours, which are always representatives).
 
-    // 2) Reposition r' so every incident E_DAG edge is satisfied, reusing the
-    //    thesis-faithful acyclic reorder (reorder_for_edge) on the already-present
-    //    I -> r' and r' -> O edges. Snapshot I and O into local vectors so the
-    //    permute() calls (which never touch the edge sets) can't disturb iteration.
+    // Reposition r' so every incident E_DAG edge is satisfied, reusing the
+    // thesis-faithful acyclic reorder (reorder_for_edge) on the already-present
+    // I -> r' and r' -> O edges. Snapshot I and O into local vectors so the
+    // permute() calls (which never touch the edge sets) can't disturb iteration.
     std::vector<vertex_t> preds, succs;
     for (vertex_t p : I) if (p != rprime) preds.push_back(p);
     for (vertex_t s : O) if (s != rprime) succs.push_back(s);

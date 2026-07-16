@@ -4,6 +4,7 @@ add_library(feline_dyn STATIC
     src/dyn_graph.cpp
     src/dyn_index.cpp
     src/dyn_query.cpp
+    src/dyn_scc.cpp
     src/feline_pk.cpp
 )
 target_include_directories(feline_dyn PUBLIC include)

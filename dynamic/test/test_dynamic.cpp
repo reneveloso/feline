@@ -4,6 +4,7 @@
 #include "feline_dyn/dyn_graph.hpp"
 #include "feline_dyn/dyn_index.hpp"
 #include "feline_dyn/dyn_query.hpp"
+#include "feline_dyn/dyn_scc.hpp"
 #include "feline_dyn/feline_pk.hpp"
 
 #include <algorithm>
@@ -474,6 +475,47 @@ void test_representative_repartition() {
     for (vertex_t v = 0; v < 5; ++v) ASSERT(r.find(v) == v, "repart: singletons");
 }
 
+void test_tarjan_within_partitions() {
+    // Inside C = {0,1,2,3}: 0<->1 is an SCC; 2->3 are two singletons.
+    DynamicGraph g;
+    for (vertex_t v = 0; v < 4; ++v) g.add_vertex(v);
+    g.add_edge(0, 1); g.add_edge(1, 0);
+    g.add_edge(2, 3);
+    std::vector<std::vector<vertex_t>> parts = tarjan_within(g, {0, 1, 2, 3});
+    ASSERT(parts.size() == 3, "tarjan: three partitions {0,1},{2},{3}");
+    size_t size_of_0 = 0, total = 0;
+    for (const auto& p : parts) {
+        total += p.size();
+        if (std::find(p.begin(), p.end(), 0u) != p.end()) size_of_0 = p.size();
+    }
+    ASSERT(total == 4, "tarjan: every member appears exactly once");
+    ASSERT(size_of_0 == 2, "tarjan: 0 and 1 are in the same partition");
+}
+
+void test_tarjan_within_ignores_edges_leaving_the_set() {
+    // 0 and 1 are mutually reachable ONLY through vertex 9, which is outside C.
+    // Restricted to C they must remain two separate partitions.
+    DynamicGraph g;
+    for (vertex_t v = 0; v < 2; ++v) g.add_vertex(v);
+    g.add_vertex(9);
+    g.add_edge(0, 9); g.add_edge(9, 1); g.add_edge(1, 9); g.add_edge(9, 0);
+    std::vector<std::vector<vertex_t>> parts = tarjan_within(g, {0, 1});
+    ASSERT(parts.size() == 2, "tarjan: a vertex outside the set cannot merge partitions");
+}
+
+void test_reachable_within_is_bounded() {
+    DynamicGraph g;
+    for (vertex_t v = 0; v < 4; ++v) g.add_vertex(v);
+    g.add_vertex(9);
+    g.add_edge(0, 1); g.add_edge(1, 2);   // inside C
+    g.add_edge(0, 9); g.add_edge(9, 3);   // detour that leaves C
+    std::unordered_set<vertex_t> C{0, 1, 2, 3};
+    ASSERT(reachable_within(g, C, 0, 2), "rw: 0->1->2 stays inside C");
+    ASSERT(!reachable_within(g, C, 0, 3), "rw: path through 9 (outside C) is not allowed");
+    ASSERT(reachable_within(g, C, 2, 2), "rw: reflexive");
+    ASSERT(!reachable_within(g, C, 2, 0), "rw: no reverse path");
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -494,6 +536,9 @@ int main() {
     RUN_TEST(test_incremental_from_graph);
     RUN_TEST(test_dynamic_graph_remove_edge);
     RUN_TEST(test_representative_repartition);
+    RUN_TEST(test_tarjan_within_partitions);
+    RUN_TEST(test_tarjan_within_ignores_edges_leaving_the_set);
+    RUN_TEST(test_reachable_within_is_bounded);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

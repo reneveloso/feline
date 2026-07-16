@@ -458,6 +458,22 @@ void test_dynamic_graph_remove_edge() {
     ASSERT(g.out_all().size() == 3, "dg-rm: out_all exposes every vertex");
 }
 
+void test_representative_repartition() {
+    Representative r;
+    for (vertex_t v = 0; v < 5; ++v) r.make_set(v);
+    r.unite({0, 1, 2, 3, 4}, 2);   // one component, representative 2
+    ASSERT(r.find(0) == 2 && r.find(4) == 2, "repart: single component first");
+
+    r.repartition({{0, 1}, {2, 3, 4}});   // split into two components
+    ASSERT(r.find(0) == 0 && r.find(1) == 0, "repart: partition 1 rep is its first member");
+    ASSERT(r.find(2) == 2 && r.find(3) == 2 && r.find(4) == 2, "repart: partition 2 rep");
+    ASSERT(r.find(0) != r.find(2), "repart: partitions are distinct components");
+
+    // Splitting again into singletons must work (no stale parent/rank state).
+    r.repartition({{0}, {1}, {2}, {3}, {4}});
+    for (vertex_t v = 0; v < 5; ++v) ASSERT(r.find(v) == v, "repart: singletons");
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -477,6 +493,7 @@ int main() {
     RUN_TEST(test_random_insertions_oracle);
     RUN_TEST(test_incremental_from_graph);
     RUN_TEST(test_dynamic_graph_remove_edge);
+    RUN_TEST(test_representative_repartition);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

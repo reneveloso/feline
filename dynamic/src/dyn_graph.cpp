@@ -55,6 +55,18 @@ vertex_t Representative::unite(const std::vector<vertex_t>& members, vertex_t ch
     return chosen;
 }
 
+void Representative::repartition(const std::vector<std::vector<vertex_t>>& partitions) {
+    // Reset every affected member first: a member of one partition may still be
+    // pointed at by a member of another until all parents are cleared.
+    for (const auto& part : partitions)
+        for (vertex_t m : part) {
+            parent_[m] = m;
+            rank_[m] = 0;
+        }
+    for (const auto& part : partitions)
+        if (!part.empty()) unite(part, part[0]);
+}
+
 // ---- DynamicGraph ----
 
 void DynamicGraph::add_vertex(vertex_t v) {

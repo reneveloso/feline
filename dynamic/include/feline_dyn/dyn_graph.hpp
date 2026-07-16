@@ -23,6 +23,12 @@ public:
     // representative id of the merged set.
     vertex_t unite(const std::vector<vertex_t>& members, vertex_t chosen);
 
+    // Un-fold: union-find has no split, so the affected members are rebuilt. Every
+    // member of every partition is reset to a singleton, then each partition is
+    // re-united under its FIRST element, which becomes that partition's representative.
+    // Postcondition: for each partition p, find(m) == p[0] for every m in p.
+    void repartition(const std::vector<std::vector<vertex_t>>& partitions);
+
 private:
     std::unordered_map<vertex_t, vertex_t> parent_;
     std::unordered_map<vertex_t, uint32_t> rank_;

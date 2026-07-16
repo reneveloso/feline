@@ -514,6 +514,7 @@ void test_reachable_within_is_bounded() {
     ASSERT(!reachable_within(g, C, 0, 3), "rw: path through 9 (outside C) is not allowed");
     ASSERT(reachable_within(g, C, 2, 2), "rw: reflexive");
     ASSERT(!reachable_within(g, C, 2, 0), "rw: no reverse path");
+    ASSERT(!reachable_within(g, C, 0, 9), "rw: a destination outside the set is not reachable");
 }
 
 int main() {

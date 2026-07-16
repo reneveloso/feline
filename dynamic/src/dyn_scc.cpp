@@ -17,8 +17,8 @@ bool reachable_within(const DynamicGraph& g, const std::unordered_set<vertex_t>&
         vertex_t n = stk.back();
         stk.pop_back();
         for (vertex_t w : g.succ(n)) {
-            if (w == v) return true;
             if (!members.count(w)) continue;   // never leave the set
+            if (w == v) return true;
             if (visited.insert(w).second) stk.push_back(w);
         }
     }

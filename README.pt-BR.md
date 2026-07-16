@@ -384,10 +384,11 @@ feline/
 
 O indice estatico acima e construido uma vez para um grafo fixo. O subprojeto
 **`dynamic/`** mantem o indice de forma **incremental** conforme o grafo muda, em vez de
-reconstrui-lo a cada atualizacao: insercao/remocao de vertice desconectado, insercao de
+reconstrui-lo a cada atualizacao: insercao/remocao de vertice desconectado; insercao de
 aresta com reordenacao incremental da regiao afetada e dobra de componentes fortemente
-conexos quando uma aresta fecha um ciclo, alem da consulta dinamica por coordenadas.
-Remocao de aresta e insercao em lote sao trabalhos futuros.
+conexos quando uma aresta fecha um ciclo; remocao de aresta, incluindo a quebra de um
+componente quando a aresta removida era a que o mantinha unido; alem da consulta dinamica
+por coordenadas. Insercao em lote e trabalho futuro.
 
 O subprojeto e **desligado por padrao**; o build estatico nao muda a menos que voce o
 habilite:

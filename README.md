@@ -385,10 +385,11 @@ feline/
 
 The static index above is built once for a fixed graph. The **`dynamic/`** subproject
 maintains the index **incrementally** as the graph changes, instead of rebuilding it on
-every update: disconnected vertex insert/remove, edge insertion with incremental reorder
+every update: disconnected vertex insert/remove; edge insertion with incremental reorder
 of the affected region and strongly-connected-component folding when an edge closes a
-cycle, and a coordinate-based dynamic query. Edge removal and batch insertion are future
-work.
+cycle; edge removal, including splitting a component back apart when the removed edge was
+the one holding it together; and a coordinate-based dynamic query. Batch insertion is
+future work.
 
 The subproject is **off by default**; the static build is unchanged unless you enable it:
 

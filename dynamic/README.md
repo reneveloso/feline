@@ -4,8 +4,8 @@ Incremental (dynamic) extension of Feline. Maintains the Feline index (two topol
 orderings / 2D coordinates) as the graph changes, instead of rebuilding it on every
 update.
 
-**Status (first increment):** vertex insert/remove, edge insertion (with SCC folding),
-and dynamic queries. Edge removal and batch insertion are future work.
+**Status:** vertex insert/remove, edge insertion (with SCC folding), edge removal (with
+SCC splitting), and dynamic queries. Batch insertion is future work.
 
 ## Building
 
@@ -32,4 +32,8 @@ One command per line:
 
 ## Known limitations / future work
 
-- Not yet implemented: edge removal and batch insertion.
+- Not yet implemented: batch insertion.
+- Removing an edge from inside a component enumerates that component by scanning the
+  vertex set, which is O(|V|) for that operation. Keeping a member list per component
+  would make it proportional to the component instead; not done until profiling shows
+  it matters.

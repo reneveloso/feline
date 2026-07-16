@@ -633,6 +633,68 @@ void test_remove_edge_noop_cases() {
     ASSERT(!pk.reachable(0, 1), "noop: the real removal still works afterwards");
 }
 
+// The index invariant the dominance cut rests on. A reachability oracle alone can miss a
+// corrupted index: the negative-cut is conservative, so a violated invariant can stay
+// silent on small graphs and only produce wrong answers later.
+static bool dag_invariant_holds(const FelinePK& pk, std::string& why) {
+    const DynIndex& idx = pk.index();
+    for (const auto& kv : pk.graph().dag_out_all()) {
+        vertex_t p = kv.first;
+        for (vertex_t q : kv.second) {
+            if (!(idx.x(p) < idx.x(q)) || !(idx.y(p) < idx.y(q))) {
+                why = "E_DAG edge (" + std::to_string(p) + "," + std::to_string(q) +
+                      ") violates the index invariant";
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// Random interleaving of insertions AND removals, all-pairs checked against a BFS
+// oracle after EVERY operation. Fixed seed for reproducibility.
+void test_insert_remove_stress() {
+    std::mt19937 rng(13579246u);
+    for (int trial = 0; trial < 200; ++trial) {
+        std::uniform_int_distribution<uint32_t> ndist(4, 9);
+        const vertex_t N = static_cast<vertex_t>(ndist(rng));
+
+        FelinePK pk;
+        DynamicGraph oracle;
+        for (vertex_t v = 0; v < N; ++v) {
+            pk.insert_vertex(v);
+            oracle.add_vertex(v);
+        }
+
+        std::uniform_int_distribution<uint32_t> pick(0, N - 1);
+        std::uniform_int_distribution<int> coin(0, 99);
+
+        for (int step = 0; step < 40; ++step) {
+            vertex_t a = static_cast<vertex_t>(pick(rng));
+            vertex_t b = static_cast<vertex_t>(pick(rng));
+            if (a == b) continue;
+
+            if (coin(rng) < 60) {          // 60% insert, 40% remove
+                pk.insert_edge(a, b);
+                oracle.add_edge(a, b);
+            } else {
+                pk.remove_edge(a, b);
+                oracle.remove_edge(a, b);
+            }
+
+            std::string why;
+            ASSERT(dag_invariant_holds(pk, why), "insert/remove stress: index invariant violated");
+
+            for (vertex_t s = 0; s < N; ++s)
+                for (vertex_t t = 0; t < N; ++t) {
+                    bool expected = dyntest::bfs_reachable(oracle, s, t);
+                    bool got = pk.reachable(s, t);
+                    ASSERT(got == expected, "insert/remove stress mismatch");
+                }
+        }
+    }
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -662,6 +724,7 @@ int main() {
     RUN_TEST(test_remove_edge_split_with_external_boundary);
     RUN_TEST(test_remove_internal_edge_without_split);
     RUN_TEST(test_remove_edge_noop_cases);
+    RUN_TEST(test_insert_remove_stress);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

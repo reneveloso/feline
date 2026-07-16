@@ -34,9 +34,12 @@ One command per line:
 
 ## Known limitations / future work
 
-- Cycle-closing insertions currently rebuild the whole index (O(|V_DAG|)) instead of
-  repositioning only the folded representative (thesis Alg. 10 lines 21–22). Localizing
-  this is a planned optimization.
+- Cycle-closing insertions reposition the folded representative r' **locally** (thesis
+  Alg. 10 lines 21–22) via bounded per-edge reorders over r''s incident E_DAG edges
+  (I → r' → O), reusing the acyclic reorder machinery, instead of rebuilding the whole
+  index. The residual O(size) cost is only the bulk member-removal compaction
+  (`DynIndex::remove_many`, a single pass over the position arrays); a further gain
+  would require gap-tolerant coordinates so that removal need not compact at all.
 - Not yet implemented: edge removal (Alg. 11) and batch insertion (Alg. 12–14).
 - Repeated insertion of many disconnected vertices before adding edges is O(n^2)
   overall because `append_isolated` reindexes the Y order on each call (fine for

@@ -23,6 +23,11 @@ public:
     // Alg. 8: remove r from both orders, compacting positions.
     void remove(vertex_t r);
 
+    // Remove a SET of reps from both orders in a single O(size) compaction pass
+    // (as opposed to O(size) per removed rep). Survivors keep their relative
+    // order; positions compact to 0..(size-|reps|-1).
+    void remove_many(const std::vector<vertex_t>& reps);
+
     // Rebuild all positions from two topological orders of the current reps.
     void set_from_scratch(const std::vector<vertex_t>& order_x,
                           const std::vector<vertex_t>& order_y);

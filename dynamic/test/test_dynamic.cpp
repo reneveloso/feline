@@ -98,6 +98,26 @@ void test_dynindex_isolated() {
     ASSERT(idx.x(20) == 0, "dynidx: compacted x");
 }
 
+void test_dynindex_remove_many() {
+    // Build an index over 6 reps via set_from_scratch, then bulk-remove a subset.
+    DynIndex idx;
+    // X order: 10,20,30,40,50,60 ; Y order: reversed to make positions distinct.
+    std::vector<vertex_t> ox = {10, 20, 30, 40, 50, 60};
+    std::vector<vertex_t> oy = {60, 50, 40, 30, 20, 10};
+    idx.set_from_scratch(ox, oy);
+    ASSERT(idx.size() == 6, "remove_many: initial size 6");
+
+    // Remove {20, 40, 60}. Survivors in X order: 10,30,50 ; in Y order: 50,30,10.
+    idx.remove_many({20, 40, 60});
+    ASSERT(idx.size() == 3, "remove_many: size 3 after removing 3");
+    ASSERT(!idx.has(20) && !idx.has(40) && !idx.has(60), "remove_many: removed reps gone");
+    ASSERT(idx.has(10) && idx.has(30) && idx.has(50), "remove_many: survivors present");
+
+    // Positions compact to 0..2, preserving relative order on each axis.
+    ASSERT(idx.x(10) == 0 && idx.x(30) == 1 && idx.x(50) == 2, "remove_many: X compact & ordered");
+    ASSERT(idx.y(50) == 0 && idx.y(30) == 1 && idx.y(10) == 2, "remove_many: Y compact & ordered");
+}
+
 void test_build_suborder_chain() {
     // sub-DAG: 0 -> 1 -> 2  (reps {0,1,2})
     DynamicGraph g;
@@ -411,6 +431,7 @@ int main() {
     RUN_TEST(test_union_find_representative);
     RUN_TEST(test_dynamic_graph_edges);
     RUN_TEST(test_dynindex_isolated);
+    RUN_TEST(test_dynindex_remove_many);
     RUN_TEST(test_build_suborder_chain);
     RUN_TEST(test_insert_remove_vertex);
     RUN_TEST(test_dyn_query_diamond);

@@ -1,6 +1,7 @@
 #include "feline_dyn/dyn_index.hpp"
 
 #include <algorithm>
+#include <unordered_set>
 
 namespace feline_dyn {
 
@@ -31,6 +32,17 @@ void DynIndex::remove(vertex_t r) {
     y_pos_.erase(r);
     for (uint32_t i = xp; i < x_at_.size(); ++i) x_pos_[x_at_[i]] = i;
     for (uint32_t i = yp; i < y_at_.size(); ++i) y_pos_[y_at_[i]] = i;
+}
+
+void DynIndex::remove_many(const std::vector<vertex_t>& reps) {
+    std::unordered_set<vertex_t> drop(reps.begin(), reps.end());
+    // Rebuild x_at_/y_at_ by copying over survivors in their current order.
+    std::vector<vertex_t> new_x, new_y;
+    new_x.reserve(x_at_.size());
+    new_y.reserve(y_at_.size());
+    for (vertex_t r : x_at_) if (!drop.count(r)) new_x.push_back(r);
+    for (vertex_t r : y_at_) if (!drop.count(r)) new_y.push_back(r);
+    reindex_from(new_x, new_y);
 }
 
 void DynIndex::set_from_scratch(const std::vector<vertex_t>& order_x,

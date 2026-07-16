@@ -136,17 +136,22 @@ static void reorder_axis(DynamicGraph& g, DynIndex& idx, Coord c, vertex_t a, ve
     idx.permute(delta, sub);
 }
 
+// Reorder for an edge a->b that ALREADY exists in E_DAG. Reorders each axis where
+// the edge violates the current order (x(a) > x(b) or y(a) > y(b)); leaves a
+// satisfied axis untouched. Does NOT add the edge — the caller guarantees it exists.
+static void reorder_for_edge(DynamicGraph& g, DynIndex& idx, vertex_t a, vertex_t b) {
+    bool x_bad = idx.x(a) > idx.x(b);
+    bool y_bad = idx.y(a) > idx.y(b);
+    if (x_bad) reorder_axis(g, idx, Coord::X, a, b);
+    if (y_bad) reorder_axis(g, idx, Coord::Y, a, b);
+}
+
 static void reorder_acyclic(DynamicGraph& g, DynIndex& idx, vertex_t a, vertex_t b) {
     // A reorder is only needed on an axis where the new edge violates the current
     // order, i.e., x(a) > x(b) or y(a) > y(b). If both already hold (a before b on
-    // both axes), just add the DAG edge.
-    bool x_bad = idx.x(a) > idx.x(b);
-    bool y_bad = idx.y(a) > idx.y(b);
+    // both axes), reorder_for_edge is a no-op. Add the DAG edge, then reorder.
     g.dag_add_edge(a, b);
-    if (!x_bad && !y_bad) return;
-
-    if (x_bad) reorder_axis(g, idx, Coord::X, a, b);
-    if (y_bad) reorder_axis(g, idx, Coord::Y, a, b);
+    reorder_for_edge(g, idx, a, b);
 }
 
 void FelinePK::insert_vertex(vertex_t v) {
@@ -220,9 +225,8 @@ void FelinePK::fold_cycle(vertex_t u, vertex_t v, const std::vector<vertex_t>& v
     std::vector<vertex_t> members(cyc.begin(), cyc.end());
     r_.unite(members, rprime);
 
-    // Remove folded reps (except r') from the DAG vertex set, so the rebuild below
-    // (via dag_out_all()) excludes them from `reps`. The index itself is fully
-    // rebuilt by set_from_scratch() below, so there is no need to touch it here.
+    // Remove folded reps (except r') from the DAG vertex set. r' stays; the folded
+    // members are absorbed and their index slots freed by remove_many below.
     for (vertex_t c : cyc) {
         if (c == rprime) continue;
         g_.dag_remove_vertex(c);
@@ -233,17 +237,42 @@ void FelinePK::fold_cycle(vertex_t u, vertex_t v, const std::vector<vertex_t>& v
     for (vertex_t p : I) if (p != rprime) g_.dag_add_edge(p, rprime);
     for (vertex_t s : O) if (s != rprime) g_.dag_add_edge(rprime, s);
 
-    // First-increment simplification: rebuild the whole index from the current DAG.
-    std::vector<vertex_t> reps;
-    reps.reserve(g_.dag_out_all().size());
-    for (const auto& kv : g_.dag_out_all()) reps.push_back(kv.first);
-    feline::XYOrdering ord = build_suborder(g_, reps);
-    std::vector<vertex_t> ox(reps.size()), oy(reps.size());
-    for (uint32_t i = 0; i < reps.size(); ++i) {
-        ox[ord.x_rank[i]] = reps[i];
-        oy[ord.y_rank[i]] = reps[i];
+    // Localized SCC-fold reposition (Alg. 10 lines 21-22): move r' locally instead
+    // of rebuilding the whole index.
+    //
+    // 1) Bulk-remove the folded members (all except r') from the index in a single
+    //    O(size) compaction. Queries never look these up directly — union-find maps
+    //    them to r'. r' stays in the index at a (now compacted) position.
+    std::vector<vertex_t> drop;
+    drop.reserve(members.size());
+    for (vertex_t c : members) if (c != rprime) drop.push_back(c);
+    idx_.remove_many(drop);
+
+    // 2) Reposition r' so every incident E_DAG edge is satisfied, reusing the
+    //    thesis-faithful acyclic reorder (reorder_for_edge) on the already-present
+    //    I -> r' and r' -> O edges. Snapshot I and O into local vectors so the
+    //    permute() calls (which never touch the edge sets) can't disturb iteration.
+    std::vector<vertex_t> preds, succs;
+    for (vertex_t p : I) if (p != rprime) preds.push_back(p);
+    for (vertex_t s : O) if (s != rprime) succs.push_back(s);
+
+    auto all_satisfied = [&]() {
+        for (vertex_t p : preds)
+            if (!(idx_.x(p) < idx_.x(rprime) && idx_.y(p) < idx_.y(rprime))) return false;
+        for (vertex_t s : succs)
+            if (!(idx_.x(rprime) < idx_.x(s) && idx_.y(rprime) < idx_.y(s))) return false;
+        return true;
+    };
+
+    // A single pred-then-succ pass may leave a residual violation in rare
+    // interleavings; repeat until r' has no violated incident edge (safety cap).
+    const int kMaxPasses = 8;
+    int pass = 0;
+    for (; pass < kMaxPasses && !all_satisfied(); ++pass) {
+        for (vertex_t p : preds) reorder_for_edge(g_, idx_, p, rprime);
+        for (vertex_t s : succs) reorder_for_edge(g_, idx_, rprime, s);
     }
-    idx_.set_from_scratch(ox, oy);
+    assert(all_satisfied() && "fold_cycle: r' reposition hit safety cap without satisfying all incident edges");
 }
 
 } // namespace feline_dyn

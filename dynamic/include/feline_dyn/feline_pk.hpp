@@ -18,6 +18,10 @@ public:
     // Alg. 10: insert edge (u, v). Defined in Tasks 8 (SCC unchanged) and 9 (SCC changed).
     void insert_edge(vertex_t u, vertex_t v);
 
+    // Remove edge (u, v) from the digraph, updating r, E_DAG and the index. If (u,v) is
+    // internal to a component, the component may split. No-op if the edge is absent.
+    void remove_edge(vertex_t u, vertex_t v);
+
     // Dynamic reachability query (defined in Task 7).
     bool reachable(vertex_t u, vertex_t v);
 
@@ -27,6 +31,8 @@ public:
 
 private:
     void fold_cycle(vertex_t u, vertex_t v, const std::vector<vertex_t>& v_cycles);
+    void reinsert_dag_edge(vertex_t u, vertex_t v);
+    void split_component(vertex_t old_rep, vertex_t u, vertex_t v);
 
     DynamicGraph g_;
     Representative r_;

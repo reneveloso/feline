@@ -517,6 +517,78 @@ void test_reachable_within_is_bounded() {
     ASSERT(!reachable_within(g, C, 0, 9), "rw: a destination outside the set is not reachable");
 }
 
+void test_remove_edge_different_components() {
+    FelinePK pk;
+    for (vertex_t v = 0; v < 3; ++v) pk.insert_vertex(v);
+    pk.insert_edge(0, 1);
+    pk.insert_edge(1, 2);
+    const int64_t x0 = pk.index().x(0), y0 = pk.index().y(0);
+    const int64_t x1 = pk.index().x(1), y1 = pk.index().y(1);
+    const int64_t x2 = pk.index().x(2), y2 = pk.index().y(2);
+    ASSERT(pk.reachable(0, 2), "rm-diff: 0 reaches 2 before removal");
+
+    pk.remove_edge(1, 2);
+    ASSERT(!pk.reachable(0, 2), "rm-diff: 0 no longer reaches 2");
+    ASSERT(!pk.reachable(1, 2), "rm-diff: 1 no longer reaches 2");
+    ASSERT(pk.reachable(0, 1), "rm-diff: 0 still reaches 1");
+    // Removing an edge never invalidates a topological order: nothing moves.
+    ASSERT(pk.index().x(0) == x0 && pk.index().y(0) == y0, "rm-diff: coords of 0 unchanged");
+    ASSERT(pk.index().x(1) == x1 && pk.index().y(1) == y1, "rm-diff: coords of 1 unchanged");
+    ASSERT(pk.index().x(2) == x2 && pk.index().y(2) == y2, "rm-diff: coords of 2 unchanged");
+}
+
+void test_remove_edge_keeps_dag_edge_while_a_parallel_edge_remains() {
+    FelinePK pk;
+    for (vertex_t v = 0; v < 4; ++v) pk.insert_vertex(v);
+    pk.insert_edge(0, 1); pk.insert_edge(1, 0);   // component {0,1}
+    pk.insert_edge(2, 3); pk.insert_edge(3, 2);   // component {2,3}
+    pk.insert_edge(0, 2);                          // first link between the components
+    pk.insert_edge(1, 3);                          // second link between the SAME components
+    ASSERT(pk.reachable(0, 3), "rm-par: reaches before");
+
+    pk.remove_edge(0, 2);
+    ASSERT(pk.reachable(0, 3), "rm-par: still reaches through the parallel edge (1,3)");
+    pk.remove_edge(1, 3);
+    ASSERT(!pk.reachable(0, 3), "rm-par: unreachable once both links are gone");
+    ASSERT(pk.reachable(0, 1) && pk.reachable(2, 3), "rm-par: components themselves intact");
+}
+
+void test_remove_edge_splits_component() {
+    FelinePK pk;
+    for (vertex_t v = 0; v < 3; ++v) pk.insert_vertex(v);
+    pk.insert_edge(0, 1); pk.insert_edge(1, 2); pk.insert_edge(2, 0);   // SCC {0,1,2}
+    ASSERT(pk.reachable(2, 0) && pk.reachable(0, 2), "split: one SCC before removal");
+
+    pk.remove_edge(2, 0);   // breaks the cycle -> chain 0->1->2
+    ASSERT(pk.reachable(0, 1) && pk.reachable(1, 2) && pk.reachable(0, 2), "split: chain intact");
+    ASSERT(!pk.reachable(2, 0), "split: 2 no longer reaches 0");
+    ASSERT(!pk.reachable(1, 0), "split: 1 no longer reaches 0");
+    ASSERT(!pk.reachable(2, 1), "split: 2 no longer reaches 1");
+}
+
+void test_remove_internal_edge_without_split() {
+    FelinePK pk;
+    for (vertex_t v = 0; v < 3; ++v) pk.insert_vertex(v);
+    pk.insert_edge(0, 1); pk.insert_edge(1, 2); pk.insert_edge(2, 0);
+    pk.insert_edge(1, 0);   // redundant back edge inside the SCC
+
+    pk.remove_edge(1, 0);   // still strongly connected through 1->2->0
+    ASSERT(pk.reachable(1, 0) && pk.reachable(0, 1), "no-split: component survives");
+    ASSERT(pk.reachable(2, 1) && pk.reachable(0, 2), "no-split: all pairs still reachable");
+}
+
+void test_remove_edge_noop_cases() {
+    FelinePK pk;
+    pk.insert_vertex(0); pk.insert_vertex(1);
+    pk.insert_edge(0, 1);
+    pk.remove_edge(1, 0);     // edge never existed
+    ASSERT(pk.reachable(0, 1), "noop: unrelated removal leaves the edge alone");
+    pk.remove_edge(5, 6);     // unknown vertices
+    ASSERT(pk.reachable(0, 1), "noop: unknown vertices are safe");
+    pk.remove_edge(0, 1);
+    ASSERT(!pk.reachable(0, 1), "noop: the real removal still works afterwards");
+}
+
 int main() {
     std::fprintf(stderr, "\n=== Feline-PK Dynamic Tests ===\n\n");
     RUN_TEST(test_skeleton);
@@ -540,6 +612,11 @@ int main() {
     RUN_TEST(test_tarjan_within_partitions);
     RUN_TEST(test_tarjan_within_ignores_edges_leaving_the_set);
     RUN_TEST(test_reachable_within_is_bounded);
+    RUN_TEST(test_remove_edge_different_components);
+    RUN_TEST(test_remove_edge_keeps_dag_edge_while_a_parallel_edge_remains);
+    RUN_TEST(test_remove_edge_splits_component);
+    RUN_TEST(test_remove_internal_edge_without_split);
+    RUN_TEST(test_remove_edge_noop_cases);
     TEST_SUMMARY();
     return dyntest::tests_failed > 0 ? 1 : 0;
 }

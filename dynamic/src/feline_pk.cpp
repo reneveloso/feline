@@ -1,6 +1,7 @@
 #include "feline_dyn/feline_pk.hpp"
 
 #include "feline_dyn/dyn_query.hpp"
+#include "feline_dyn/dyn_scc.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -271,6 +272,80 @@ void FelinePK::fold_cycle(vertex_t u, vertex_t v, const std::vector<vertex_t>& v
         for (vertex_t s : succs) reorder_for_edge(g_, idx_, rprime, s);
     }
     assert(all_satisfied() && "fold_cycle: r' reposition hit safety cap without satisfying all incident edges");
+}
+
+// True iff some edge of E still runs from the component represented by `a` to the one
+// represented by `b`. Scans the digraph (see the design note on enumeration cost).
+static bool components_still_linked(const DynamicGraph& g, Representative& r,
+                                    vertex_t a, vertex_t b) {
+    for (const auto& kv : g.out_all()) {
+        vertex_t w = kv.first;
+        if (!r.contains(w) || r.find(w) != a) continue;
+        for (vertex_t k : kv.second)
+            if (r.contains(k) && r.find(k) == b) return true;
+    }
+    return false;
+}
+
+// Re-establish the E_DAG edge for an existing E edge (u,v) whose endpoints'
+// representatives may have just changed. No cycle test is needed: the caller has just
+// run Tarjan, so a re-inserted edge can never close a cycle. Reorders only the axes the
+// edge actually violates; if it violates none, this is a no-op.
+void FelinePK::reinsert_dag_edge(vertex_t u, vertex_t v) {
+    vertex_t a = r_.find(u), b = r_.find(v);
+    if (a == b) return;   // internal to a component: it has no DAG edge
+    g_.dag_add_edge(a, b);
+    reorder_for_edge(g_, idx_, a, b);
+}
+
+void FelinePK::split_component(vertex_t old_rep, vertex_t u, vertex_t v) {
+    // Collect the component's members. Enumerating by scanning the digraph is O(|V|);
+    // union-find alone cannot list a set's members. Revisit if profiling shows it dominates.
+    std::vector<vertex_t> C;
+    for (const auto& kv : g_.out_all()) {
+        vertex_t w = kv.first;
+        if (r_.contains(w) && r_.find(w) == old_rep) C.push_back(w);
+    }
+    const std::unordered_set<vertex_t> C_set(C.begin(), C.end());
+
+    // Does u still reach v without leaving the component? If so, nothing changed.
+    if (reachable_within(g_, C_set, u, v)) return;
+
+    // The component broke apart. Disconnect the old representative from the DAG.
+    std::vector<std::pair<vertex_t, vertex_t>> to_remove;
+    for (vertex_t s : g_.dag_succ(old_rep)) to_remove.push_back({old_rep, s});
+    for (vertex_t p : g_.dag_pred(old_rep)) to_remove.push_back({p, old_rep});
+    for (const auto& e : to_remove) g_.dag_remove_edge(e.first, e.second);
+    g_.dag_remove_vertex(old_rep);
+
+    // Re-partition the component and elect a representative per partition.
+    std::vector<std::vector<vertex_t>> parts = tarjan_within(g_, C);
+    r_.repartition(parts);
+    for (const auto& p : parts) g_.dag_add_vertex(r_.find(p[0]));
+
+    // Re-insert every E edge touching the component, in both directions. Members kept
+    // their coordinates, so a re-elected representative resumes near its old position
+    // and most of these re-insertions need no reorder at all.
+    for (vertex_t w : C) {
+        for (vertex_t k : g_.succ(w)) reinsert_dag_edge(w, k);
+        for (vertex_t p : g_.pred(w)) reinsert_dag_edge(p, w);
+    }
+}
+
+void FelinePK::remove_edge(vertex_t u, vertex_t v) {
+    if (!g_.has_edge(u, v)) return;   // no-op: the edge is not there
+    g_.remove_edge(u, v);
+    if (!r_.contains(u) || !r_.contains(v)) return;
+
+    vertex_t a = r_.find(u), b = r_.find(v);
+    if (a != b) {
+        // Different components: r does not change, and removing an edge can never
+        // invalidate a topological order, so the coordinates do not change either.
+        // The DAG edge goes only if no other E edge still links the two components.
+        if (!components_still_linked(g_, r_, a, b)) g_.dag_remove_edge(a, b);
+        return;
+    }
+    split_component(a, u, v);
 }
 
 } // namespace feline_dyn

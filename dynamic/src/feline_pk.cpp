@@ -241,11 +241,12 @@ void FelinePK::fold_cycle(vertex_t u, vertex_t v, const std::vector<vertex_t>& v
     // Localized SCC-fold reposition (Alg. 10 lines 21-22): move r' locally instead
     // of rebuilding the whole index.
     //
-    // Folded members leave the DAG but KEEP their coordinates: if an edge removal later
-    // splits this component, a re-elected representative resumes near its old position
-    // instead of being re-inserted at an extreme corner. Their coordinates are inert
-    // while they are not representatives (queries map through r.find() first, and
-    // reorders only walk E_DAG neighbours, which are always representatives).
+    // Folded members leave the DAG but KEEP their coordinates. This is REQUIRED for
+    // correctness, not just performance: if an edge removal later splits this component,
+    // split_component re-elects representatives from these members and never assigns them
+    // a fresh coordinate — erasing them here would make edge removal throw from inside a
+    // reorder. Their coordinates are inert while they are not representatives (queries map
+    // through r_.find() first; reorders only walk E_DAG neighbours, always representatives).
 
     // Reposition r' so every incident E_DAG edge is satisfied, reusing the
     // thesis-faithful acyclic reorder (reorder_for_edge) on the already-present
@@ -323,9 +324,18 @@ void FelinePK::split_component(vertex_t old_rep, vertex_t u, vertex_t v) {
     r_.repartition(parts);
     for (const auto& p : parts) g_.dag_add_vertex(r_.find(p[0]));
 
+    // split_component REQUIRES that folded members kept their coordinates (see fold_cycle):
+    // a re-elected representative is never append_isolated'd, so its coordinate must already
+    // exist or the reorders below would throw from inside DynIndex.
+    for (const auto& p : parts) assert(idx_.has(r_.find(p[0])) && "re-elected representative lost its coordinate");
+
     // Re-insert every E edge touching the component, in both directions. Members kept
     // their coordinates, so a re-elected representative resumes near its old position
     // and most of these re-insertions need no reorder at all.
+    // A single pass suffices here — unlike fold_cycle's fixpoint loop — because each
+    // reinsert_dag_edge call adds exactly one edge to an otherwise index-consistent DAG,
+    // which is precisely reorder_for_edge's proven single-edge contract; fold_cycle instead
+    // adds many edges before any reorder runs, so one pass there is not guaranteed enough.
     for (vertex_t w : C) {
         for (vertex_t k : g_.succ(w)) reinsert_dag_edge(w, k);
         for (vertex_t p : g_.pred(w)) reinsert_dag_edge(p, w);

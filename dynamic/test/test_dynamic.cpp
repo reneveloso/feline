@@ -107,31 +107,6 @@ void test_dynindex_isolated() {
     ASSERT(idx.y(30) < idx.y(20), "dynidx: append at front of Y");
 }
 
-void test_dynindex_remove_many() {
-    // Build an index over 6 reps via set_from_scratch, then bulk-remove a subset.
-    DynIndex idx;
-    // X order: 10,20,30,40,50,60 ; Y order: reversed to make positions distinct.
-    std::vector<vertex_t> ox = {10, 20, 30, 40, 50, 60};
-    std::vector<vertex_t> oy = {60, 50, 40, 30, 20, 10};
-    idx.set_from_scratch(ox, oy);
-    ASSERT(idx.size() == 6, "remove_many: initial size 6");
-
-    // Remove {20, 40, 60}. Survivors in X order: 10,30,50 ; in Y order: 50,30,10.
-    idx.remove_many({20, 40, 60});
-    ASSERT(idx.size() == 3, "remove_many: size 3 after removing 3");
-    ASSERT(!idx.has(20) && !idx.has(40) && !idx.has(60), "remove_many: removed reps gone");
-    ASSERT(idx.has(10) && idx.has(30) && idx.has(50), "remove_many: survivors present");
-
-    // Gap-tolerant coords: survivors KEEP their original coordinate values (no
-    // compaction) and thus their relative order on each axis. X order 10<30<50 and
-    // Y order 50<30<10 must still hold as strict inequalities.
-    ASSERT(idx.x(10) < idx.x(30) && idx.x(30) < idx.x(50), "remove_many: X relative order preserved");
-    ASSERT(idx.y(50) < idx.y(30) && idx.y(30) < idx.y(10), "remove_many: Y relative order preserved");
-    // Values are exactly the originals from set_from_scratch (survivors untouched).
-    ASSERT(idx.x(10) == 0 && idx.x(30) == 2 && idx.x(50) == 4, "remove_many: X survivor values unchanged");
-    ASSERT(idx.y(50) == 1 && idx.y(30) == 3 && idx.y(10) == 5, "remove_many: Y survivor values unchanged");
-}
-
 void test_build_suborder_chain() {
     // sub-DAG: 0 -> 1 -> 2  (reps {0,1,2})
     DynamicGraph g;
@@ -515,6 +490,7 @@ void test_reachable_within_is_bounded() {
     ASSERT(reachable_within(g, C, 2, 2), "rw: reflexive");
     ASSERT(!reachable_within(g, C, 2, 0), "rw: no reverse path");
     ASSERT(!reachable_within(g, C, 0, 9), "rw: a destination outside the set is not reachable");
+    ASSERT(!reachable_within(g, C, 9, 9), "rw: a source outside the set is not reachable from itself");
 }
 
 void test_remove_edge_different_components() {
@@ -558,12 +534,16 @@ void test_remove_edge_splits_component() {
     for (vertex_t v = 0; v < 3; ++v) pk.insert_vertex(v);
     pk.insert_edge(0, 1); pk.insert_edge(1, 2); pk.insert_edge(2, 0);   // SCC {0,1,2}
     ASSERT(pk.reachable(2, 0) && pk.reachable(0, 2), "split: one SCC before removal");
+    for (vertex_t v = 0; v < 3; ++v)
+        ASSERT(pk.index().has(v), "split: folded members keep their coordinates");
 
     pk.remove_edge(2, 0);   // breaks the cycle -> chain 0->1->2
     ASSERT(pk.reachable(0, 1) && pk.reachable(1, 2) && pk.reachable(0, 2), "split: chain intact");
     ASSERT(!pk.reachable(2, 0), "split: 2 no longer reaches 0");
     ASSERT(!pk.reachable(1, 0), "split: 1 no longer reaches 0");
     ASSERT(!pk.reachable(2, 1), "split: 2 no longer reaches 1");
+    for (vertex_t v = 0; v < 3; ++v)
+        ASSERT(pk.index().has(v), "split: every re-elected representative has a coordinate");
 }
 
 void test_remove_internal_edge_without_split() {
@@ -629,6 +609,10 @@ void test_remove_edge_noop_cases() {
     ASSERT(pk.reachable(0, 1), "noop: unrelated removal leaves the edge alone");
     pk.remove_edge(5, 6);     // unknown vertices
     ASSERT(pk.reachable(0, 1), "noop: unknown vertices are safe");
+    pk.insert_edge(0, 0);     // self-loop
+    pk.remove_edge(0, 0);     // must be a clean no-op
+    ASSERT(pk.reachable(0, 0), "noop: self-reachability holds after self-loop removal");
+    ASSERT(pk.reachable(0, 1), "noop: self-loop removal left the real edge alone");
     pk.remove_edge(0, 1);
     ASSERT(!pk.reachable(0, 1), "noop: the real removal still works afterwards");
 }
@@ -702,7 +686,6 @@ int main() {
     RUN_TEST(test_union_find_representative);
     RUN_TEST(test_dynamic_graph_edges);
     RUN_TEST(test_dynindex_isolated);
-    RUN_TEST(test_dynindex_remove_many);
     RUN_TEST(test_build_suborder_chain);
     RUN_TEST(test_insert_remove_vertex);
     RUN_TEST(test_dyn_query_diamond);

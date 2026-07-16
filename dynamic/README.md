@@ -33,7 +33,9 @@ One command per line:
 ## Known limitations / future work
 
 - Not yet implemented: batch insertion.
-- Removing an edge from inside a component enumerates that component by scanning the
-  vertex set, which is O(|V|) for that operation. Keeping a member list per component
-  would make it proportional to the component instead; not done until profiling shows
-  it matters.
+- Edge removal scans the vertex set, which is O(|V|) for that operation, on BOTH paths:
+  removing an edge between two components checks whether any other edge still links them,
+  and removing an edge inside a component enumerates that component. The between-components
+  path is the more frequent one. A per-DAG-edge multiplicity counter would make the
+  between-components check O(1); enumerating a component cheaply would need a member list
+  per component. Neither is done until profiling shows it matters.

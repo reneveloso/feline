@@ -16,15 +16,6 @@ void DynIndex::remove(vertex_t r) {
     y_coord_.erase(r);
 }
 
-void DynIndex::remove_many(const std::vector<vertex_t>& reps) {
-    // O(|reps|): each erase leaves a gap; survivors keep their coordinate values
-    // and therefore their relative order on both axes.
-    for (vertex_t r : reps) {
-        x_coord_.erase(r);
-        y_coord_.erase(r);
-    }
-}
-
 void DynIndex::set_from_scratch(const std::vector<vertex_t>& order_x,
                                 const std::vector<vertex_t>& order_y) {
     x_coord_.clear();

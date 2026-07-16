@@ -8,8 +8,8 @@ namespace feline_dyn {
 
 bool reachable_within(const DynamicGraph& g, const std::unordered_set<vertex_t>& members,
                       vertex_t u, vertex_t v) {
-    if (u == v) return true;
     if (!members.count(u)) return false;
+    if (u == v) return true;
 
     std::unordered_set<vertex_t> visited{u};
     std::vector<vertex_t> stk{u};
@@ -53,6 +53,8 @@ std::vector<std::vector<vertex_t>> tarjan_within(const DynamicGraph& g,
         if (index_of.count(root)) continue;
 
         std::vector<Frame> call;
+        call.reserve(members.size());   // exact depth bound: prevents reallocation (and the
+                                        // dangling `Frame& f` hazard) and the regrowth cost
         index_of[root] = lowlink[root] = next_index++;
         scc_stack.push_back(root);
         on_stack.insert(root);

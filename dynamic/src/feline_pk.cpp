@@ -13,7 +13,7 @@ using namespace feline_dyn;
 
 enum class Coord { X, Y };
 
-static inline uint32_t coord(const DynIndex& idx, Coord c, vertex_t r) {
+static inline int64_t coord(const DynIndex& idx, Coord c, vertex_t r) {
     return c == Coord::X ? idx.x(r) : idx.y(r);
 }
 
@@ -27,8 +27,8 @@ static inline uint32_t coord(const DynIndex& idx, Coord c, vertex_t r) {
 //     coord(s) < hi.
 // Explicit stack, no recursion; visited set dedupes.
 static std::vector<vertex_t> collect_in_band(const DynamicGraph& g, const DynIndex& idx,
-                                             Coord c, vertex_t start, uint32_t lo,
-                                             uint32_t hi, bool follow_pred) {
+                                             Coord c, vertex_t start, int64_t lo,
+                                             int64_t hi, bool follow_pred) {
     std::unordered_set<vertex_t> visited;
     std::vector<vertex_t> out;
     std::vector<vertex_t> stk;
@@ -116,7 +116,7 @@ static std::vector<uint32_t> identity_rank(const DynIndex& idx, Coord c,
 // single-axis phases — each leaving the other axis untouched via identity_rank() —
 // keeps every δ within the classical bounded ancestor/descendant band per axis.
 static void reorder_axis(DynamicGraph& g, DynIndex& idx, Coord c, vertex_t a, vertex_t b) {
-    uint32_t lo = coord(idx, c, b), hi = coord(idx, c, a);
+    int64_t lo = coord(idx, c, b), hi = coord(idx, c, a);
     std::vector<vertex_t> sig_b = collect_in_band(g, idx, c, a, lo, hi, /*follow_pred=*/true);
     std::vector<vertex_t> sig_f = collect_in_band(g, idx, c, b, lo, hi, /*follow_pred=*/false);
 

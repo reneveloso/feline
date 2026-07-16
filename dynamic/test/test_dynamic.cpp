@@ -93,9 +93,17 @@ void test_dynindex_isolated() {
     ASSERT(idx.x(10) < idx.x(20), "dynidx: x order by append");
     ASSERT(idx.y(20) < idx.y(10), "dynidx: y prepended");
     ASSERT(idx.size() == 2, "dynidx: size 2");
+    // Gap-tolerant coords: capture the survivor's coordinates before removal so we
+    // can assert they are UNCHANGED by the O(1) remove (no compaction / relabeling).
+    int64_t x20 = idx.x(20), y20 = idx.y(20);
     idx.remove(10);
     ASSERT(!idx.has(10) && idx.size() == 1, "dynidx: remove");
-    ASSERT(idx.x(20) == 0, "dynidx: compacted x");
+    ASSERT(idx.x(20) == x20 && idx.y(20) == y20, "dynidx: survivor coords unchanged (gap left, no compaction)");
+    // Append order still holds against the survivor: new vertex goes to the high end
+    // of X (x(30) > x(20)) and the front of Y (y(30) < y(20)).
+    idx.append_isolated(30);
+    ASSERT(idx.x(30) > idx.x(20), "dynidx: append at high end of X");
+    ASSERT(idx.y(30) < idx.y(20), "dynidx: append at front of Y");
 }
 
 void test_dynindex_remove_many() {
@@ -113,9 +121,14 @@ void test_dynindex_remove_many() {
     ASSERT(!idx.has(20) && !idx.has(40) && !idx.has(60), "remove_many: removed reps gone");
     ASSERT(idx.has(10) && idx.has(30) && idx.has(50), "remove_many: survivors present");
 
-    // Positions compact to 0..2, preserving relative order on each axis.
-    ASSERT(idx.x(10) == 0 && idx.x(30) == 1 && idx.x(50) == 2, "remove_many: X compact & ordered");
-    ASSERT(idx.y(50) == 0 && idx.y(30) == 1 && idx.y(10) == 2, "remove_many: Y compact & ordered");
+    // Gap-tolerant coords: survivors KEEP their original coordinate values (no
+    // compaction) and thus their relative order on each axis. X order 10<30<50 and
+    // Y order 50<30<10 must still hold as strict inequalities.
+    ASSERT(idx.x(10) < idx.x(30) && idx.x(30) < idx.x(50), "remove_many: X relative order preserved");
+    ASSERT(idx.y(50) < idx.y(30) && idx.y(30) < idx.y(10), "remove_many: Y relative order preserved");
+    // Values are exactly the originals from set_from_scratch (survivors untouched).
+    ASSERT(idx.x(10) == 0 && idx.x(30) == 2 && idx.x(50) == 4, "remove_many: X survivor values unchanged");
+    ASSERT(idx.y(50) == 1 && idx.y(30) == 3 && idx.y(10) == 5, "remove_many: Y survivor values unchanged");
 }
 
 void test_build_suborder_chain() {

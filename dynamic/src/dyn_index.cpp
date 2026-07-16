@@ -1,69 +1,61 @@
 #include "feline_dyn/dyn_index.hpp"
 
 #include <algorithm>
-#include <unordered_set>
 
 namespace feline_dyn {
 
-void DynIndex::reindex_from(const std::vector<vertex_t>& x_at,
-                            const std::vector<vertex_t>& y_at) {
-    x_at_ = x_at;
-    y_at_ = y_at;
-    x_pos_.clear();
-    y_pos_.clear();
-    for (uint32_t i = 0; i < x_at_.size(); ++i) x_pos_[x_at_[i]] = i;
-    for (uint32_t i = 0; i < y_at_.size(); ++i) y_pos_[y_at_[i]] = i;
-}
-
 void DynIndex::append_isolated(vertex_t r) {
-    // End of X.
-    x_pos_[r] = static_cast<uint32_t>(x_at_.size());
-    x_at_.push_back(r);
-    // Front of Y: shift all existing Y positions up by one.
-    y_at_.insert(y_at_.begin(), r);
-    for (uint32_t i = 0; i < y_at_.size(); ++i) y_pos_[y_at_[i]] = i;
+    // End of X (current high end), front of Y (current low end). O(1), no shifting.
+    x_coord_[r] = next_x_++;
+    y_coord_[r] = --next_y_;
 }
 
 void DynIndex::remove(vertex_t r) {
-    uint32_t xp = x_pos_.at(r), yp = y_pos_.at(r);
-    x_at_.erase(x_at_.begin() + xp);
-    y_at_.erase(y_at_.begin() + yp);
-    x_pos_.erase(r);
-    y_pos_.erase(r);
-    for (uint32_t i = xp; i < x_at_.size(); ++i) x_pos_[x_at_[i]] = i;
-    for (uint32_t i = yp; i < y_at_.size(); ++i) y_pos_[y_at_[i]] = i;
+    // O(1): drop both coordinates, leaving a gap in each order. No compaction.
+    x_coord_.erase(r);
+    y_coord_.erase(r);
 }
 
 void DynIndex::remove_many(const std::vector<vertex_t>& reps) {
-    std::unordered_set<vertex_t> drop(reps.begin(), reps.end());
-    // Rebuild x_at_/y_at_ by copying over survivors in their current order.
-    std::vector<vertex_t> new_x, new_y;
-    new_x.reserve(x_at_.size());
-    new_y.reserve(y_at_.size());
-    for (vertex_t r : x_at_) if (!drop.count(r)) new_x.push_back(r);
-    for (vertex_t r : y_at_) if (!drop.count(r)) new_y.push_back(r);
-    reindex_from(new_x, new_y);
+    // O(|reps|): each erase leaves a gap; survivors keep their coordinate values
+    // and therefore their relative order on both axes.
+    for (vertex_t r : reps) {
+        x_coord_.erase(r);
+        y_coord_.erase(r);
+    }
 }
 
 void DynIndex::set_from_scratch(const std::vector<vertex_t>& order_x,
                                 const std::vector<vertex_t>& order_y) {
-    reindex_from(order_x, order_y);
+    x_coord_.clear();
+    y_coord_.clear();
+    for (uint32_t i = 0; i < order_x.size(); ++i)
+        x_coord_[order_x[i]] = static_cast<int64_t>(i);
+    for (uint32_t i = 0; i < order_y.size(); ++i)
+        y_coord_[order_y[i]] = static_cast<int64_t>(i);
+    // After assigning X in [0, k-1], a subsequent append_isolated must go ABOVE the
+    // current max (k-1): next_x_ = k gives next_x_++ == k. Y is assigned in [0, k-1]
+    // too, and a subsequent append must go to the FRONT of Y (BELOW the current min,
+    // 0): next_y_ = 0 gives --next_y_ == -1 < 0. Both extremes preserved.
+    next_x_ = static_cast<int64_t>(order_x.size());
+    next_y_ = 0;
 }
 
 void DynIndex::permute(const std::vector<vertex_t>& delta,
                        const feline::XYOrdering& sub) {
-    // Slots = positions currently held by delta vertices, sorted ascending (X and Y).
-    std::vector<uint32_t> x_slots, y_slots;
-    x_slots.reserve(delta.size());
-    y_slots.reserve(delta.size());
+    // Slots = coordinate VALUES currently held by delta vertices, sorted ascending
+    // (X and Y independently). The permute reassigns delta to exactly these values.
+    std::vector<int64_t> xs, ys;
+    xs.reserve(delta.size());
+    ys.reserve(delta.size());
     for (vertex_t r : delta) {
-        x_slots.push_back(x_pos_.at(r));
-        y_slots.push_back(y_pos_.at(r));
+        xs.push_back(x_coord_.at(r));
+        ys.push_back(y_coord_.at(r));
     }
-    std::sort(x_slots.begin(), x_slots.end());
-    std::sort(y_slots.begin(), y_slots.end());
+    std::sort(xs.begin(), xs.end());
+    std::sort(ys.begin(), ys.end());
 
-    // Order delta by the new relative ranks (sub is indexed positionally by delta).
+    // Order delta indices by the new relative ranks (sub is indexed positionally by delta).
     std::vector<uint32_t> by_x(delta.size()), by_y(delta.size());
     for (uint32_t i = 0; i < delta.size(); ++i) { by_x[i] = i; by_y[i] = i; }
     std::sort(by_x.begin(), by_x.end(),
@@ -71,14 +63,10 @@ void DynIndex::permute(const std::vector<vertex_t>& delta,
     std::sort(by_y.begin(), by_y.end(),
               [&](uint32_t a, uint32_t b) { return sub.y_rank[a] < sub.y_rank[b]; });
 
-    // Assign delta vertices to the sorted slots in the new order.
+    // Assign delta vertices to the sorted slot values in the new order.
     for (uint32_t k = 0; k < delta.size(); ++k) {
-        vertex_t rx = delta[by_x[k]];
-        x_at_[x_slots[k]] = rx;
-        x_pos_[rx] = x_slots[k];
-        vertex_t ry = delta[by_y[k]];
-        y_at_[y_slots[k]] = ry;
-        y_pos_[ry] = y_slots[k];
+        x_coord_[delta[by_x[k]]] = xs[k];
+        y_coord_[delta[by_y[k]]] = ys[k];
     }
 }
 
